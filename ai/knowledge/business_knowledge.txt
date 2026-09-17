@@ -30,6 +30,15 @@ AWS Cloud Engineering
 Course Description:
 This training helps beginners learn AWS cloud concepts and practical cloud engineering skills.
 
+Course Duration:
+3 months.
+
+IMPORTANT AWS DURATION FACT:
+The AWS Cloud Engineering course duration is 3 months.
+
+Course Fee:
+₹25,000.
+
 Topics Covered:
 - AWS EC2
 - Amazon S3
@@ -49,33 +58,29 @@ Target Students:
 Training Mode:
 Online and instructor-led training.
 
-Course Duration:
-3 months.
-
-Course Fee:
-₹25,000.
-
 Prerequisites:
 Basic computer knowledge is enough to start.
 
 Career Support:
 Students receive interview preparation and cloud project guidance.
 
-AWS Certification Support:
-Students who complete the Skillect AWS Cloud Engineering training receive a Skillect course completion certificate.
 
-Official AWS international certifications are earned by passing the relevant official AWS certification examination.
+==================================================
+AWS CERTIFICATION SUPPORT
+==================================================
 
-Skillect provides training and preparation support to help AWS Cloud Engineering students prepare for relevant AWS certification examinations.
+Students who complete the Skillect AWS Cloud Engineering training
+receive a Skillect course completion certificate.
 
-Important AWS Certification Information:
-Skillect provides its own course completion certificate.
+If a student wants an official international AWS certification,
+Skillect provides training and examination preparation support for
+the relevant official AWS certification examination.
 
-Skillect provides training and exam preparation support for relevant AWS certification examinations.
+To earn the official AWS certification, the student must pass the
+relevant official AWS certification examination.
 
-Skillect does not directly issue official AWS international certifications.
-
-Students must pass the relevant official AWS certification examination to earn the corresponding AWS certification.
+Skillect does not directly issue official AWS international
+certifications.
 
 
 ==================================================
@@ -87,6 +92,12 @@ Azure Cloud Engineering
 
 Course Availability:
 Azure Cloud Engineering training is available.
+
+Course Duration:
+3 months.
+
+IMPORTANT AZURE DURATION FACT:
+The Azure Cloud Engineering course duration is 3 months.
 
 Course Fee:
 ₹25,000.
@@ -100,85 +111,239 @@ Azure Services Covered:
 - Azure Load Balancer
 - Azure Monitor
 
-Azure Certification Support:
-Students who complete the Skillect Azure Cloud Engineering training receive a Skillect course completion certificate.
 
-Official Microsoft Azure international certifications are earned by passing the relevant official Microsoft certification examination.
+==================================================
+AZURE CERTIFICATION SUPPORT
+==================================================
 
-Skillect provides training and preparation support to help Azure Cloud Engineering students prepare for relevant Microsoft Azure certification examinations.
+Students who complete the Skillect Azure Cloud Engineering training
+receive a Skillect course completion certificate.
 
-Important Azure Certification Information:
-Skillect provides its own course completion certificate.
+If a student wants an official international Microsoft Azure
+certification, Skillect provides training and examination preparation
+support for the relevant official Microsoft Azure certification
+examination.
 
-Skillect provides training and exam preparation support for relevant Microsoft Azure certification examinations.
+To earn the official Microsoft Azure certification, the student must
+pass the relevant official Microsoft certification examination.
 
-Skillect does not directly issue official Microsoft Azure international certifications.
-
-Students must pass the relevant official Microsoft certification examination to earn the corresponding Microsoft Azure certification.
-
-Important Azure Course Information:
-Only the Azure course information explicitly listed in this section is currently approved.
-
-The Azure course duration, prerequisites, training mode, target students, and career support details are not currently available in this knowledge base.
-
-Do not assume that AWS Cloud Engineering course details also apply to Azure Cloud Engineering.
+Skillect does not directly issue official Microsoft Azure
+international certifications.
 
 
 ==================================================
-CERTIFICATION INFORMATION
+AZURE COURSE INFORMATION LIMITS
+==================================================
+
+The following Azure information is approved:
+
+- Course availability
+- Course duration: 3 months
+- Course fee: ₹25,000
+- Azure services covered
+- Certification support
+
+The following Azure information is NOT currently available:
+
+- Prerequisites
+- Training mode
+- Target students
+- Career support
+
+Do not copy AWS-specific prerequisites, training mode, target student,
+or career support information to Azure.
+
+
+==================================================
+INTERNATIONAL CERTIFICATION TRAINING
+==================================================
+
+Skillect provides training and examination preparation support for
+students who want to prepare for relevant official international
+cloud certification examinations.
+
+AWS:
+
+Skillect provides training and examination preparation support for
+relevant official AWS certification examinations.
+
+Students must pass the relevant official AWS certification examination
+to earn the official AWS certification.
+
+Microsoft Azure:
+
+Skillect provides training and examination preparation support for
+relevant official Microsoft Azure certification examinations.
+
+Students must pass the relevant official Microsoft certification
+examination to earn the official Microsoft Azure certification.
+
+Skillect does not directly issue official AWS or Microsoft Azure
+international certifications.
+
+
+==================================================
+CERTIFICATE DISTINCTION
 ==================================================
 
 Skillect Course Completion Certificate:
-Students who complete Skillect Cloud Engineering training receive a Skillect course completion certificate.
 
-International Certification:
-Skillect does not directly issue official AWS or Microsoft Azure international certifications.
+Students who complete Skillect Cloud Engineering training receive a
+Skillect course completion certificate.
 
-To earn an official international cloud certification, students must pass the relevant official certification examination from AWS or Microsoft.
+Official International Certification:
 
-Certification Exam Preparation:
-Skillect provides training and preparation support for relevant AWS and Microsoft Azure certification examinations.
+An official AWS or Microsoft Azure certification is different from the
+Skillect course completion certificate.
 
-For AWS Cloud Engineering students:
-Skillect provides training and preparation support for relevant AWS certification examinations.
+Students must pass the relevant official AWS or Microsoft certification
+examination to earn the corresponding official international
+certification.
 
-For Azure Cloud Engineering students:
-Skillect provides training and preparation support for relevant Microsoft Azure certification examinations.
+Skillect provides training and examination preparation support for
+these relevant certification examinations.
 
-Important Certification Distinction:
-A Skillect course completion certificate and an official AWS or Microsoft Azure certification are different.
 
-The Skillect certificate is provided after completing the Skillect training.
+==================================================
+QUICK APPROVED FACTS
+==================================================
 
-Official AWS or Microsoft Azure certifications require the student to pass the relevant official certification examination.
+AWS Cloud Engineering:
+- Duration: 3 months
+- Fee: ₹25,000
+
+Azure Cloud Engineering:
+- Duration: 3 months
+- Fee: ₹25,000
+
+AWS Cloud Engineering duration is 3 months.
+
+Azure Cloud Engineering duration is 3 months.
+
+AWS Cloud Engineering fee is ₹25,000.
+
+Azure Cloud Engineering fee is ₹25,000.
 
 
 ==================================================
 IMPORTANT AI RULES
 ==================================================
 
-Only use the approved business information provided in this knowledge base when answering business-specific questions.
+Only use approved business information from this knowledge base when
+answering business-specific questions.
 
-Keep AWS Cloud Engineering information and Azure Cloud Engineering information separate.
+Keep AWS Cloud Engineering and Azure Cloud Engineering information
+separate.
 
-Do not copy AWS-specific details to Azure unless the same information is explicitly provided in the Azure section.
+If the customer explicitly asks about AWS, answer using AWS information.
 
-Do not copy Azure-specific details to AWS unless the same information is explicitly provided in the AWS section.
+If the customer explicitly asks about Azure, answer using Azure
+information.
+
+A customer's saved qualification interest must not override the
+provider explicitly mentioned in their current question.
+
+Example:
+
+Saved customer interest:
+Azure
+
+Current customer question:
+"What is the AWS Cloud Engineering course duration?"
+
+Correct answer:
+"The AWS Cloud Engineering course duration is 3 months."
+
+The customer's saved interest may remain Azure because asking an AWS
+business question does not automatically mean their interest changed.
+
+If the customer asks:
+
+"What is the AWS Cloud Engineering course duration?"
+
+Answer:
+
+"The AWS Cloud Engineering course duration is 3 months."
+
+If the customer asks:
+
+"What is the Azure Cloud Engineering course duration?"
+
+Answer:
+
+"The Azure Cloud Engineering course duration is 3 months."
+
+If the customer asks:
+
+"What is the AWS Cloud Engineering course fee?"
+
+Answer:
+
+"The AWS Cloud Engineering course fee is ₹25,000."
+
+If the customer asks:
+
+"What is the Azure Cloud Engineering course fee?"
+
+Answer:
+
+"The Azure Cloud Engineering course fee is ₹25,000."
+
+Do not copy AWS-specific details to Azure unless the same information
+is explicitly approved for Azure.
+
+Do not copy Azure-specific details to AWS unless the same information
+is explicitly approved for AWS.
 
 When answering certification questions, clearly distinguish between:
+
 1. Skillect course completion certificate.
-2. Official AWS or Microsoft Azure certification.
+2. Official AWS or Microsoft Azure international certification.
 
-Never claim that Skillect directly issues an official AWS or Microsoft Azure international certification.
+If a student wants an official international AWS certification,
+Skillect provides training and examination preparation support for
+the relevant official AWS certification examination.
 
-If a customer asks whether Skillect provides a certificate, explain that students who complete the training receive a Skillect course completion certificate.
+The student must pass the relevant official AWS certification
+examination to earn the official AWS certification.
 
-If a customer asks about an international AWS certification, explain that the student must pass the relevant official AWS certification examination and that Skillect provides training and preparation support.
+If a student wants an official international Microsoft Azure
+certification, Skillect provides training and examination preparation
+support for the relevant official Microsoft Azure certification
+examination.
 
-If a customer asks about an international Microsoft Azure certification, explain that the student must pass the relevant official Microsoft certification examination and that Skillect provides training and preparation support.
+The student must pass the relevant official Microsoft certification
+examination to earn the official Microsoft Azure certification.
 
-Do not invent the name, level, examination code, examination fee, examination date, validity period, passing score, or other certification details unless they are explicitly provided in this knowledge base.
+Never claim that Skillect directly issues an official AWS or
+Microsoft Azure international certification.
 
-If the requested business information is not available in this knowledge base, say:
+Do not claim that completing Skillect training automatically gives
+the student an official international certification.
+
+Do not invent:
+- Certification name
+- Certification level
+- Examination code
+- Examination fee
+- Examination date
+- Validity period
+- Passing score
+- Discounts
+- Guarantees
+- Unapproved services
+- Unapproved course details
+
+Do not invent study materials, practice questions, examination
+registration services, or other certification services unless those
+services are explicitly added to this knowledge base.
+
+Do not repeat the same business information unnecessarily.
+
+Do not ask an unnecessary follow-up question after answering a
+business-information question.
+
+If the requested business information is not available in this
+knowledge base, say:
 
 "I don't have enough information to answer that yet."

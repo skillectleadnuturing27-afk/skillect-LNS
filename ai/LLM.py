@@ -16,7 +16,8 @@ their requirements.
 Rules:
 1. Be professional, friendly, and concise.
 2. Help the customer with their enquiry.
-3. Ask only one qualification question at a time.
+3. Ask only one qualification question at a time when a qualification
+   question is actually needed.
 4. Try to understand the customer's:
    - interest
    - budget
@@ -33,7 +34,7 @@ Rules:
     requirement, career goal, situation, or contact availability
     does NOT require business knowledge.
 11. When the customer provides qualification information, acknowledge
-    it naturally and continue the conversation.
+    it naturally.
 12. Do not use the business-information fallback just because a
     qualification statement is not present in the knowledge base.
 13. If the customer says when they are available to be contacted,
@@ -44,9 +45,88 @@ Rules:
     capability.
 15. Never claim that the customer provided contact information unless
     that information is actually present in the conversation.
-16. When a customer provides broad contact availability, such as
-    "this week", you may ask for ONE specific preferred day or time.
+16. For business-information questions, answer the customer's question
+    directly and stop after answering it.
+17. Do not add unnecessary follow-up questions.
+18. Do not repeat the same information multiple times in one response.
+19. Give each important fact only once unless repetition is required
+    to avoid misunderstanding.
 """
+
+
+# =========================
+# CERTIFICATION GUARD
+# =========================
+
+def get_certification_response(prompt: str):
+
+    prompt_lower = prompt.lower().strip()
+
+    certification_words = [
+        "certification",
+        "certificate",
+        "international certificate",
+        "international certification",
+        "certification exam",
+        "certification examination",
+        "exam preparation",
+        "examination preparation",
+    ]
+
+    is_certification_message = any(
+        word in prompt_lower
+        for word in certification_words
+    )
+
+    if not is_certification_message:
+        return None
+
+    # -------------------------
+    # AWS CERTIFICATION
+    # -------------------------
+
+    if "aws" in prompt_lower or "amazon" in prompt_lower:
+
+        return (
+            "Yes. Skillect provides training and examination "
+            "preparation support for relevant official AWS "
+            "certification examinations. To earn the official AWS "
+            "certification, you must pass the relevant official AWS "
+            "certification examination. Skillect does not directly "
+            "issue the official AWS certification."
+        )
+
+    # -------------------------
+    # AZURE CERTIFICATION
+    # -------------------------
+
+    if (
+        "azure" in prompt_lower
+        or "microsoft" in prompt_lower
+    ):
+
+        return (
+            "Yes. Skillect provides training and examination "
+            "preparation support for relevant official Microsoft "
+            "Azure certification examinations. To earn the official "
+            "Microsoft Azure certification, you must pass the relevant "
+            "official Microsoft certification examination. Skillect "
+            "does not directly issue the official Microsoft Azure "
+            "certification."
+        )
+
+    # -------------------------
+    # GENERAL CERTIFICATION
+    # -------------------------
+
+    return (
+        "Skillect provides training and examination preparation "
+        "support for relevant AWS and Microsoft Azure certification "
+        "examinations. Official certifications require students to "
+        "pass the relevant official AWS or Microsoft certification "
+        "examination. Skillect does not directly issue these official "
+        "international certifications."
+    )
 
 
 # =========================
@@ -82,24 +162,24 @@ def get_contact_availability_response(prompt: str):
     if "this week" in prompt_lower:
         return (
             "Sure. You're available to be contacted this week. "
-            "Is there a particular day or time that works best for you?"
+            "Please provide your preferred day and time."
         )
 
     if "next week" in prompt_lower:
         return (
             "Sure. You're available to be contacted next week. "
-            "Is there a particular day or time that works best for you?"
+            "Please provide your preferred day and time."
         )
 
     if "tomorrow" in prompt_lower:
         return (
             "Sure. You're available to be contacted tomorrow. "
-            "What time works best for you?"
+            "Please provide your preferred time."
         )
 
     return (
         "Sure. I've noted your availability. "
-        "What day or time works best for you?"
+        "Please provide your preferred day and time."
     )
 
 
@@ -110,15 +190,37 @@ def get_contact_availability_response(prompt: str):
 def ask_ai(prompt: str, history=None) -> str:
 
     # =========================
-    # 1. BUILD RAG QUERY
+    # 1. CERTIFICATION GUARD
+    # =========================
+
+    certification_response = get_certification_response(
+        prompt
+    )
+
+    if certification_response is not None:
+        return certification_response
+
+
+    # =========================
+    # 2. CONTACT GUARD
+    # =========================
+
+    contact_response = get_contact_availability_response(
+        prompt
+    )
+
+    if contact_response is not None:
+        return contact_response
+
+
+    # =========================
+    # 3. BUILD RAG QUERY
     # =========================
 
     retrieval_parts = []
 
     prompt_lower = prompt.lower()
 
-    # Detect whether CURRENT message explicitly
-    # mentions AWS or Azure.
     current_mentions_aws = "aws" in prompt_lower
     current_mentions_azure = "azure" in prompt_lower
 
@@ -127,26 +229,12 @@ def ask_ai(prompt: str, history=None) -> str:
         or current_mentions_azure
     )
 
-    # If the current message explicitly says AWS/Azure,
-    # current message gets retrieval priority.
-    #
-    # Example:
-    # Saved interest = Azure
-    # Current question = "What is the AWS course fee?"
-    #
-    # RAG must retrieve AWS information,
-    # while qualification can remain Azure.
     if current_has_explicit_provider:
 
         retrieval_query = prompt
 
     else:
 
-        # No explicit provider in the current message.
-        # Use recent history to understand follow-ups:
-        # "How much is it?"
-        # "How long is it?"
-        # "What about that?"
         if history:
 
             recent_user_messages = [
@@ -167,7 +255,7 @@ def ask_ai(prompt: str, history=None) -> str:
 
 
     # =========================
-    # 2. RETRIEVE KNOWLEDGE
+    # 4. RETRIEVE KNOWLEDGE
     # =========================
 
     business_knowledge = retrieve_relevant_knowledge(
@@ -185,7 +273,7 @@ def ask_ai(prompt: str, history=None) -> str:
 
 
     # =========================
-    # 3. BUILD SYSTEM CONTEXT
+    # 5. BUILD SYSTEM CONTEXT
     # =========================
 
     system_content = f"""
@@ -241,7 +329,6 @@ STRICT GROUNDING RULES:
    - "Call me tomorrow."
    - "I am available on Friday."
    - "You can contact me after 6 PM."
-   - "I am free this weekend."
 
 3. BUSINESS INFORMATION QUESTIONS:
 
@@ -273,90 +360,32 @@ STRICT GROUNDING RULES:
 9. For a qualification statement:
    - Acknowledge the information naturally.
    - Do not invent business facts.
-   - If useful, ask ONE relevant qualification question.
+   - If a qualification question is necessary, ask at most ONE.
    - Do not ask for information the customer already provided.
 
-10. Example:
-
-    Customer:
-    "I can start immediately and I need a job."
-
-    Good response:
-    "Got it. You're ready to start immediately and your goal is
-    to get a job. What budget are you planning for the training?"
-
-    Bad response:
-    "I don't have enough information to answer that yet."
-
-11. GENERAL CONVERSATION:
+10. GENERAL CONVERSATION:
 
     Respond naturally to greetings, thanks, confirmations,
     and other normal conversation.
 
-12. CONTACT AVAILABILITY:
+11. Never invent business facts.
 
-    If the customer tells you when they are available for contact,
-    acknowledge the availability naturally.
+12. Do not mention information that the customer did not ask for.
 
-13. If the customer gives only a broad period such as:
-    - this week
-    - next week
-    - tomorrow
-    - this weekend
-
-    you may ask ONE useful follow-up question for a preferred
-    day or time when appropriate.
-
-14. Example:
-
-    Customer:
-    "I am free this week. You can contact me."
-
-    Good response:
-    "Sure. You're available to be contacted this week. Is there
-    a particular day or time that works best for you?"
-
-15. Never say:
-    - "I'll call you."
-    - "I'll contact you."
-    - "I'll send you a message."
-    - "I'll reach out to you."
-    - "I've scheduled your call."
-    - "Your appointment is booked."
-
-    unless the application actually has a tool or capability
-    that performed that action.
-
-16. Do not say:
-    "I've got your contact information."
-
-    unless the customer actually provided contact information
-    in the conversation.
-
-17. Contact availability is NOT automatically the same as the
-    customer's course-start timeline.
-
-18. Do not change or infer the qualification timeline only
-    because the customer says when they are available for a call.
-
-19. Never invent business facts.
-
-20. Do not mention information that the customer did not ask for.
-
-21. Do not mention missing business information unless the
+13. Do not mention missing business information unless the
     customer actually requested that information.
 
-22. Previous conversation messages are for conversation context
+14. Previous conversation messages are for conversation context
     and memory.
 
-23. Do not repeat unrelated information from previous
+15. Do not repeat unrelated information from previous
     conversation history.
 
-24. If an older assistant message conflicts with CURRENT
+16. If an older assistant message conflicts with CURRENT
     APPROVED BUSINESS KNOWLEDGE or these current rules,
     ignore the older assistant message.
 
-25. For follow-up questions such as:
+17. For follow-up questions such as:
     - "How long is it?"
     - "How much is it?"
     - "What about that?"
@@ -364,10 +393,10 @@ STRICT GROUNDING RULES:
     use recent conversation context to understand what
     the customer is referring to.
 
-26. Answer only the customer's CURRENT message unless they
+18. Answer only the customer's CURRENT message unless they
     explicitly refer to something discussed earlier.
 
-27. IMPORTANT PROVIDER RULE:
+19. IMPORTANT PROVIDER RULE:
 
     If the CURRENT customer message explicitly mentions AWS,
     answer the current business question about AWS.
@@ -379,26 +408,30 @@ STRICT GROUNDING RULES:
     must NOT override an explicitly named provider in the
     CURRENT business question.
 
-    Example:
+20. Asking about a provider does NOT automatically mean the
+    customer's qualification interest has changed.
 
-    Previous qualification interest:
-    Azure
+21. BUSINESS RESPONSE ENDING RULE:
 
-    Current customer question:
-    "What is the fee for the AWS Cloud Engineering course?"
+    After answering a business-information question, STOP.
 
-    Correct behavior:
-    Answer the AWS course fee.
+    Do NOT end with:
+    - "Would you like to know more?"
+    - "Would you like information about..."
+    - "Do you want to know..."
+    - "Can I help with anything else?"
 
-    Do NOT change the customer's saved qualification interest
-    merely because they asked an AWS business-information question.
+22. REPETITION RULE:
 
-28. Keep the final answer concise and natural.
+    Do not state the same fact more than once in the same
+    response.
+
+23. Keep the final answer concise, direct, and natural.
 """
 
 
     # =========================
-    # 4. START MESSAGES
+    # 6. START MESSAGES
     # =========================
 
     messages = [
@@ -410,7 +443,7 @@ STRICT GROUNDING RULES:
 
 
     # =========================
-    # 5. ADD CONVERSATION MEMORY
+    # 7. ADD CONVERSATION MEMORY
     # =========================
 
     if history:
@@ -426,7 +459,7 @@ STRICT GROUNDING RULES:
 
 
     # =========================
-    # 6. REINFORCE CURRENT REQUEST
+    # 8. REINFORCE CURRENT REQUEST
     # =========================
 
     messages.append(
@@ -443,68 +476,41 @@ RETRIEVED APPROVED KNOWLEDGE:
 
 INSTRUCTIONS FOR THIS RESPONSE:
 
-1. First classify the CURRENT message as:
-   - business information question
-   - qualification statement
-   - general conversation
-   - contact availability
+1. Answer the CURRENT customer message.
 
-2. Do not output the classification.
+2. For business questions:
+   - Use only the retrieved approved knowledge.
+   - Answer only what was asked.
+   - Do not invent information.
+   - Do not repeat information.
+   - Do not ask an unnecessary follow-up question.
 
-3. If it is a business information question:
-   - Use only retrieved approved knowledge for business facts.
-   - Answer directly if the information exists.
-   - Use the fallback only when the requested business
-     information is unavailable.
+3. For qualification statements:
+   - Acknowledge the information naturally.
+   - Do not invent business information.
+   - Ask at most ONE qualification question only if needed.
 
-4. If it is a qualification statement:
-   - Acknowledge what the customer said naturally.
-   - Do NOT use the business-information fallback.
-   - Do NOT invent business information.
-   - Ask at most ONE useful qualification question if needed.
+4. If the CURRENT message explicitly says AWS:
+   answer the business question using AWS knowledge.
 
-5. If it is general conversation:
-   - Respond naturally.
+5. If the CURRENT message explicitly says Azure:
+   answer the business question using Azure knowledge.
 
-6. If it is contact availability:
-   - Acknowledge the customer's availability.
-   - Do NOT claim that you will personally call, contact,
-     reach out, message, schedule, or book anything.
-   - Do NOT claim that you received contact information unless
-     the customer actually provided it.
-   - If useful, ask at most ONE question for a preferred
-     day or time.
-   - Do NOT treat contact availability as a new course-start
-     timeline.
+6. Asking about AWS or Azure does NOT automatically change
+   the customer's saved qualification interest.
 
-7. Understand references such as "it", "that", and "this"
-   using recent conversation context.
+7. Do not repeat unrelated previous conversation content.
 
-8. CURRENT MESSAGE PROVIDER PRIORITY:
+8. Keep the response concise.
 
-   If the CURRENT message explicitly says AWS:
-   - Answer the current business question using AWS knowledge.
-   - Do not switch the answer to Azure because of old history.
-
-   If the CURRENT message explicitly says Azure:
-   - Answer the current business question using Azure knowledge.
-   - Do not switch the answer to AWS because of old history.
-
-   Asking about a provider does NOT automatically mean the
-   customer's qualification interest has changed.
-
-9. Do not repeat unrelated previous conversation content.
-
-10. Answer the CURRENT question directly.
-
-11. Keep the response concise.
+9. After answering a business-information question, STOP.
 """
         }
     )
 
 
     # =========================
-    # 7. ADD CURRENT MESSAGE
+    # 9. ADD CURRENT MESSAGE
     # =========================
 
     messages.append(
@@ -516,7 +522,7 @@ INSTRUCTIONS FOR THIS RESPONSE:
 
 
     # =========================
-    # 8. GENERATE AI RESPONSE
+    # 10. GENERATE AI RESPONSE
     # =========================
 
     try:
@@ -536,24 +542,7 @@ INSTRUCTIONS FOR THIS RESPONSE:
                 "Ollama returned an empty response"
             )
 
-
-        # =========================
-        # 9. CONTACT AVAILABILITY GUARD
-        # =========================
-
-        safe_contact_response = (
-            get_contact_availability_response(prompt)
-        )
-
-        if safe_contact_response is not None:
-            return safe_contact_response
-
-
-        # =========================
-        # 10. NORMAL AI RESPONSE
-        # =========================
-
-        return ai_message
+        return ai_message.strip()
 
 
     # =========================

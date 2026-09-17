@@ -46,16 +46,63 @@ def normalize_words(text: str) -> set[str]:
 # =========================
 
 def detect_provider(query: str) -> str | None:
+    """
+    Detect the cloud provider mentioned most recently
+    in the query.
+
+    This prevents old conversation history from
+    overriding the provider in the current message.
+
+    Example:
+
+    Old history:
+    "What is the Azure course duration?"
+
+    Current message:
+    "What is the AWS course duration?"
+
+    Combined retrieval query may contain both Azure
+    and AWS. Because AWS appears most recently,
+    this function returns "aws".
+    """
 
     query_lower = query.lower()
 
-    if "azure" in query_lower:
-        return "azure"
+    aws_matches = list(
+        re.finditer(
+            r"\baws\b",
+            query_lower
+        )
+    )
 
-    if "aws" in query_lower:
+    azure_matches = list(
+        re.finditer(
+            r"\bazure\b",
+            query_lower
+        )
+    )
+
+    # Neither provider mentioned
+    if not aws_matches and not azure_matches:
+        return None
+
+    # Only AWS mentioned
+    if aws_matches and not azure_matches:
         return "aws"
 
-    return None
+    # Only Azure mentioned
+    if azure_matches and not aws_matches:
+        return "azure"
+
+    # Both providers mentioned.
+    # The most recently mentioned provider wins.
+    last_aws_position = aws_matches[-1].start()
+    last_azure_position = azure_matches[-1].start()
+
+    if last_aws_position > last_azure_position:
+        return "aws"
+
+    return "azure"
 
 
 # =========================
@@ -80,12 +127,21 @@ def get_knowledge_blocks() -> dict[str, str]:
     azure_marker = "AZURE CLOUD ENGINEERING"
     rules_marker = "IMPORTANT AI RULES"
 
-    aws_start = upper_knowledge.find(aws_marker)
-    azure_start = upper_knowledge.find(azure_marker)
-    rules_start = upper_knowledge.find(rules_marker)
+    aws_start = upper_knowledge.find(
+        aws_marker
+    )
+
+    azure_start = upper_knowledge.find(
+        azure_marker
+    )
+
+    rules_start = upper_knowledge.find(
+        rules_marker
+    )
 
     # If expected headings are not found,
-    # safely return the complete knowledge as general knowledge.
+    # safely return the complete knowledge
+    # as general knowledge.
     if aws_start == -1 or azure_start == -1:
 
         return {
@@ -96,17 +152,20 @@ def get_knowledge_blocks() -> dict[str, str]:
         }
 
     # General information before AWS section
-    general = knowledge[:aws_start].strip()
+    general = knowledge[
+        :aws_start
+    ].strip()
 
-    # AWS section
-    aws_end = azure_start
-
+    # AWS section ends where Azure starts
     aws = knowledge[
-        aws_start:aws_end
+        aws_start:azure_start
     ].strip()
 
     # Azure section
-    if rules_start != -1 and rules_start > azure_start:
+    if (
+        rules_start != -1
+        and rules_start > azure_start
+    ):
 
         azure = knowledge[
             azure_start:rules_start
@@ -144,7 +203,10 @@ def expand_query(query: str) -> str:
 
     provider = detect_provider(query)
 
-    # Provider context
+    # =========================
+    # PROVIDER CONTEXT
+    # =========================
+
     if provider == "azure":
 
         extra_words.extend([
@@ -161,7 +223,10 @@ def expand_query(query: str) -> str:
             "engineering"
         ])
 
-    # Duration
+    # =========================
+    # DURATION
+    # =========================
+
     if (
         "how long" in query_lower
         or "duration" in query_lower
@@ -173,7 +238,10 @@ def expand_query(query: str) -> str:
             "duration"
         ])
 
-    # Fee / price
+    # =========================
+    # FEE / PRICE
+    # =========================
+
     if (
         "how much" in query_lower
         or "fee" in query_lower
@@ -186,7 +254,10 @@ def expand_query(query: str) -> str:
             "fee"
         ])
 
-    # Topics / services / syllabus
+    # =========================
+    # TOPICS / SERVICES
+    # =========================
+
     if (
         "topic" in query_lower
         or "topics" in query_lower
@@ -203,7 +274,10 @@ def expand_query(query: str) -> str:
             "covered"
         ])
 
-    # Training mode
+    # =========================
+    # TRAINING MODE
+    # =========================
+
     if (
         "online" in query_lower
         or "offline" in query_lower
@@ -216,7 +290,10 @@ def expand_query(query: str) -> str:
             "mode"
         ])
 
-    # Prerequisites
+    # =========================
+    # PREREQUISITES
+    # =========================
+
     if (
         "prerequisite" in query_lower
         or "prerequisites" in query_lower
@@ -230,7 +307,10 @@ def expand_query(query: str) -> str:
             "knowledge"
         ])
 
-    # Career support
+    # =========================
+    # CAREER SUPPORT
+    # =========================
+
     if (
         "career support" in query_lower
         or "interview preparation" in query_lower
@@ -245,7 +325,31 @@ def expand_query(query: str) -> str:
             "guidance"
         ])
 
-    # Number of courses
+    # =========================
+    # CERTIFICATION
+    # =========================
+
+    if (
+        "certificate" in query_lower
+        or "certification" in query_lower
+        or "certification exam" in query_lower
+        or "certification examination" in query_lower
+        or "international certification" in query_lower
+    ):
+
+        extra_words.extend([
+            "certification",
+            "certificate",
+            "examination",
+            "training",
+            "preparation",
+            "support"
+        ])
+
+    # =========================
+    # NUMBER OF COURSES
+    # =========================
+
     if (
         "how many" in query_lower
         or "number of courses" in query_lower
@@ -284,7 +388,9 @@ def score_block(
     if not block:
         return 0
 
-    expanded_query = expand_query(query)
+    expanded_query = expand_query(
+        query
+    )
 
     query_words = normalize_words(
         expanded_query
@@ -316,27 +422,9 @@ def retrieve_relevant_knowledge(
     azure = blocks["azure"]
     rules = blocks["rules"]
 
-    provider = detect_provider(query)
-
-    # =========================
-    # AZURE-SPECIFIC QUESTION
-    # =========================
-
-    if provider == "azure":
-
-        selected = []
-
-        if general:
-            selected.append(general)
-
-        if azure:
-            selected.append(azure)
-
-        if rules:
-            selected.append(rules)
-
-        return "\n\n".join(selected)
-
+    provider = detect_provider(
+        query
+    )
 
     # =========================
     # AWS-SPECIFIC QUESTION
@@ -347,15 +435,51 @@ def retrieve_relevant_knowledge(
         selected = []
 
         if general:
-            selected.append(general)
+            selected.append(
+                general
+            )
 
         if aws:
-            selected.append(aws)
+            selected.append(
+                aws
+            )
 
         if rules:
-            selected.append(rules)
+            selected.append(
+                rules
+            )
 
-        return "\n\n".join(selected)
+        return "\n\n".join(
+            selected
+        )
+
+
+    # =========================
+    # AZURE-SPECIFIC QUESTION
+    # =========================
+
+    if provider == "azure":
+
+        selected = []
+
+        if general:
+            selected.append(
+                general
+            )
+
+        if azure:
+            selected.append(
+                azure
+            )
+
+        if rules:
+            selected.append(
+                rules
+            )
+
+        return "\n\n".join(
+            selected
+        )
 
 
     # =========================
@@ -374,12 +498,18 @@ def retrieve_relevant_knowledge(
         selected = []
 
         if general:
-            selected.append(general)
+            selected.append(
+                general
+            )
 
         if rules:
-            selected.append(rules)
+            selected.append(
+                rules
+            )
 
-        return "\n\n".join(selected)
+        return "\n\n".join(
+            selected
+        )
 
 
     # =========================
@@ -392,7 +522,10 @@ def retrieve_relevant_knowledge(
 
         scored_blocks.append(
             (
-                score_block(query, general),
+                score_block(
+                    query,
+                    general
+                ),
                 general
             )
         )
@@ -401,7 +534,10 @@ def retrieve_relevant_knowledge(
 
         scored_blocks.append(
             (
-                score_block(query, aws),
+                score_block(
+                    query,
+                    aws
+                ),
                 aws
             )
         )
@@ -410,7 +546,10 @@ def retrieve_relevant_knowledge(
 
         scored_blocks.append(
             (
-                score_block(query, azure),
+                score_block(
+                    query,
+                    azure
+                ),
                 azure
             )
         )
@@ -427,7 +566,9 @@ def retrieve_relevant_knowledge(
     ][:2]
 
     if rules:
-        relevant_blocks.append(rules)
+        relevant_blocks.append(
+            rules
+        )
 
     return "\n\n".join(
         relevant_blocks

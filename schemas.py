@@ -1,3 +1,4 @@
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from datetime import datetime
 from typing import Optional, Literal
 
@@ -188,4 +189,34 @@ class LeadActivityResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True
+    )
+
+# =========================
+# CONVERSATION SCHEMAS
+# =========================
+
+class ConversationCreate(BaseModel):
+    role: Literal["lead", "ai"]
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class ConversationResponse(BaseModel):
+    id: int
+    lead_id: int
+    role: str
+    message: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)   
+
+# =========================
+# CONVERSATION UPDATE
+# =========================
+
+class ConversationUpdate(BaseModel):
+    role: Optional[Literal["lead", "ai"]] = None
+    message: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=2000
     )

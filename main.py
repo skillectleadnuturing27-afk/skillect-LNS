@@ -814,26 +814,35 @@ def get_leads(
     }
 
 
-# =========================================================
 # GET ONE LEAD
-# =========================================================
+# =====================================================
 
-@app.get("/leads/{lead_id}")
+@app.get(
+    "/leads/{lead_id}",
+    responses={
+        404: {
+            "description": "Lead not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Lead not found"
+                    }
+                }
+            },
+        }
+    },
+)
 def get_lead(
     lead_id: int,
     db: Session = Depends(get_db),
 ):
-
     lead = (
         db.query(models.Lead)
-        .filter(
-            models.Lead.id == lead_id
-        )
+        .filter(models.Lead.id == lead_id)
         .first()
     )
 
     if not lead:
-
         raise HTTPException(
             status_code=404,
             detail="Lead not found",
@@ -1162,18 +1171,6 @@ def get_lead_activities(
 # CREATE CONVERSATION
 # =========================================================
 
-@app.post(
-    "/leads/{lead_id}/conversations",
-    response_model=
-        schemas.ConversationResponse,
-)
-def create_conversation(
-    lead_id: int,
-    conversation:
-        schemas.ConversationCreate,
-    db: Session = Depends(get_db),
-):
-
     lead = (
         db.query(models.Lead)
         .filter(
@@ -1204,52 +1201,6 @@ def create_conversation(
     db.refresh(new_message)
 
     return new_message
-
-
-# =========================================================
-# GET CONVERSATIONS
-# =========================================================
-
-@app.get(
-    "/leads/{lead_id}/conversations",
-    response_model=list[
-        schemas.ConversationResponse
-    ],
-)
-def get_conversations(
-    lead_id: int,
-    db: Session = Depends(get_db),
-):
-
-    lead = (
-        db.query(models.Lead)
-        .filter(
-            models.Lead.id == lead_id
-        )
-        .first()
-    )
-
-    if not lead:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Lead not found",
-        )
-
-    conversations = (
-        db.query(models.Conversation)
-        .filter(
-            models.Conversation.lead_id
-            == lead_id
-        )
-        .order_by(
-            models.Conversation.created_at.asc()
-        )
-        .all()
-    )
-
-    return conversations
-
 
 # =========================================================
 # FULL LEAD DETAILS
@@ -1304,6 +1255,290 @@ def get_full_lead_details(
         "lead": lead,
         "activities": activities,
         "conversations": conversations,
+    }
+
+# =========================
+# CREATE CONVERSATION
+# =========================
+
+@app.post(
+    "/leads/{lead_id}/conversations",
+    response_model=schemas.ConversationResponse
+)
+def create_conversation(
+    lead_id: int,
+    conversation: schemas.ConversationCreate,
+    db: Session = Depends(get_db)
+):
+    # Check whether the lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Create conversation message
+    new_conversation = models.Conversation(
+        lead_id=lead_id,
+        role=conversation.role,
+        message=conversation.message
+    )
+
+    db.add(new_conversation)
+    db.commit()
+    db.refresh(new_conversation)
+
+    return new_conversation
+
+# =========================
+# GET LEAD CONVERSATIONS
+# =========================
+
+@app.get(
+    "/leads/{lead_id}/conversations",
+    response_model=list[schemas.ConversationResponse]
+)
+def get_lead_conversations(
+    lead_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db)
+):
+    # Check whether lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Get conversations with pagination
+    conversations = (
+    db.query(models.Conversation)
+    .filter(models.Conversation.lead_id == lead_id)
+    .order_by(models.Conversation.created_at.asc())
+    .offset(offset)
+    .limit(limit)
+    .all()
+)
+
+    return conversations
+
+# =========================
+# DELETE CONVERSATION
+# =========================
+
+@app.delete("/leads/{lead_id}/conversations/{conversation_id}")
+def delete_conversation(
+    lead_id: int,
+    conversation_id: int,
+    db: Session = Depends(get_db)
+):
+    # Check whether the lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Find the conversation belonging to this lead
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id,
+        models.Conversation.lead_id == lead_id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    # Delete conversation
+    db.delete(conversation)
+    db.commit()
+
+    return {
+        "message": "Conversation deleted successfully",
+        "conversation_id": conversation_id
+    }
+
+# =========================
+# UPDATE CONVERSATION
+# =========================
+
+@app.patch(
+    "/leads/{lead_id}/conversations/{conversation_id}",
+    response_model=schemas.ConversationResponse
+)
+def update_conversation(
+    lead_id: int,
+    conversation_id: int,
+    conversation_update: schemas.ConversationUpdate,
+    db: Session = Depends(get_db)
+):
+    # Check whether the lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Find conversation belonging to this lead
+    conversation = db.query(models.Conversation).filter(
+        models.Conversation.id == conversation_id,
+        models.Conversation.lead_id == lead_id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found"
+        )
+
+    # Update only provided fields
+    if conversation_update.role is not None:
+        conversation.role = conversation_update.role
+
+    if conversation_update.message is not None:
+        conversation.message = conversation_update.message
+
+    db.commit()
+    db.refresh(conversation)
+
+    return conversation
+
+# =========================
+# CONVERSATION STATISTICS
+# =========================
+
+@app.get("/leads/{lead_id}/conversations/stats")
+def get_conversation_stats(
+    lead_id: int,
+    db: Session = Depends(get_db)
+):
+    # Check if lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Get all conversations for this lead
+    conversations = db.query(models.Conversation).filter(
+        models.Conversation.lead_id == lead_id
+    ).all()
+
+    total_conversations = len(conversations)
+
+    lead_messages = sum(
+        1 for conversation in conversations
+        if conversation.role == "lead"
+    )
+
+    ai_messages = sum(
+        1 for conversation in conversations
+        if conversation.role == "ai"
+    )
+
+    return {
+        "lead_id": lead_id,
+        "total_conversations": total_conversations,
+        "lead_messages": lead_messages,
+        "ai_messages": ai_messages
+    }
+
+# =========================
+# GET LATEST CONVERSATION
+# =========================
+
+@app.get("/leads/{lead_id}/conversations/latest")
+def get_latest_conversation(
+    lead_id: int,
+    db: Session = Depends(get_db)
+):
+    # Check if lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Get latest conversation
+    conversation = (
+        db.query(models.Conversation)
+        .filter(models.Conversation.lead_id == lead_id)
+        .order_by(models.Conversation.created_at.desc())
+        .first()
+    )
+
+    if not conversation:
+        raise HTTPException(
+            status_code=404,
+            detail="No conversations found for this lead"
+        )
+
+    return conversation
+
+# =========================
+# SEARCH CONVERSATIONS
+# =========================
+
+@app.get("/leads/{lead_id}/conversations/search")
+def search_conversations(
+    lead_id: int,
+    query: str = Query(..., min_length=1),
+    db: Session = Depends(get_db)
+):
+    # Check if lead exists
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == lead_id
+    ).first()
+
+    if not lead:
+        raise HTTPException(
+            status_code=404,
+            detail="Lead not found"
+        )
+
+    # Search conversation messages
+    conversations = (
+        db.query(models.Conversation)
+        .filter(
+            models.Conversation.lead_id == lead_id,
+            models.Conversation.message.ilike(f"%{query}%")
+        )
+        .order_by(models.Conversation.created_at.desc())
+        .all()
+    )
+
+    return {
+        "lead_id": lead_id,
+        "query": query,
+        "count": len(conversations),
+        "conversations": conversations
     }
 
 

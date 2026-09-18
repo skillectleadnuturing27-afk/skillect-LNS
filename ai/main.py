@@ -131,9 +131,11 @@ def chat(
     # =========================
 
     try:
+
         ai_response = ask_ai(
             request.message,
-            history
+            history,
+            qualification
         )
 
     except RuntimeError as error:
@@ -175,6 +177,7 @@ def chat(
     # =========================
 
     try:
+
         db.commit()
 
     except SQLAlchemyError as error:

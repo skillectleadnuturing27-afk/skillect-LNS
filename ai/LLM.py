@@ -184,10 +184,197 @@ def get_contact_availability_response(prompt: str):
 
 
 # =========================
+# EXPLICIT INTEREST GUARD
+# =========================
+
+def get_explicit_interest_response(prompt: str):
+
+    prompt_lower = prompt.lower().strip()
+
+    interest_phrases = [
+        "i am interested in",
+        "i'm interested in",
+        "im interested in",
+        "my interest is",
+        "actually i am interested in",
+        "actually i'm interested in",
+        "actually im interested in",
+    ]
+
+    is_interest_statement = any(
+        phrase in prompt_lower
+        for phrase in interest_phrases
+    )
+
+    if not is_interest_statement:
+        return None
+
+    # -------------------------
+    # AWS INTEREST
+    # -------------------------
+
+    if "aws" in prompt_lower or "amazon" in prompt_lower:
+
+        return (
+            "Great. You're interested in "
+            "AWS Cloud Engineering."
+        )
+
+    # -------------------------
+    # AZURE INTEREST
+    # -------------------------
+
+    if "azure" in prompt_lower:
+
+        return (
+            "Great. You're interested in "
+            "Azure Cloud Engineering."
+        )
+
+    return None
+
+
+# =========================
+# QUALIFICATION MEMORY GUARD
+# =========================
+
+def get_qualification_memory_response(
+    prompt: str,
+    qualification=None
+):
+
+    if not qualification:
+        return None
+
+    prompt_lower = prompt.lower().strip()
+
+    # -------------------------
+    # CURRENT INTEREST
+    # -------------------------
+
+    interest_questions = [
+        "what is my current interest",
+        "what's my current interest",
+        "what is my interest",
+        "what's my interest",
+        "which course am i interested in",
+        "which course i am interested in",
+        "what course am i interested in",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in interest_questions
+    ):
+
+        interest = qualification.get("interest")
+
+        if interest:
+            return (
+                f"Your current interest is "
+                f"{interest} Cloud Engineering."
+            )
+
+        return (
+            "You haven't provided your current "
+            "course interest yet."
+        )
+
+    # -------------------------
+    # CURRENT BUDGET
+    # -------------------------
+
+    budget_questions = [
+        "what is my budget",
+        "what's my budget",
+        "what is my current budget",
+        "what's my current budget",
+        "how much is my budget",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in budget_questions
+    ):
+
+        budget = qualification.get("budget")
+
+        if budget is not None:
+            return f"Your current budget is ₹{budget:,}."
+
+        return "You haven't provided your budget yet."
+
+    # -------------------------
+    # CURRENT TIMELINE
+    # -------------------------
+
+    timeline_questions = [
+        "what is my timeline",
+        "what's my timeline",
+        "what is my current timeline",
+        "what's my current timeline",
+        "when do i want to start",
+        "when am i planning to start",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in timeline_questions
+    ):
+
+        timeline = qualification.get("timeline")
+
+        if timeline:
+            return (
+                f"Your current timeline is "
+                f"{timeline}."
+            )
+
+        return "You haven't provided your timeline yet."
+
+    # -------------------------
+    # CURRENT REQUIREMENT
+    # -------------------------
+
+    requirement_questions = [
+        "what is my requirement",
+        "what's my requirement",
+        "what is my current requirement",
+        "what's my current requirement",
+        "what do i need",
+        "what is my goal",
+        "what's my goal",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in requirement_questions
+    ):
+
+        requirement = qualification.get("requirement")
+
+        if requirement:
+            return (
+                f"Your current requirement is "
+                f"{requirement}."
+            )
+
+        return (
+            "You haven't provided your requirement yet."
+        )
+
+    return None
+
+
+# =========================
 # ASK AI
 # =========================
 
-def ask_ai(prompt: str, history=None) -> str:
+def ask_ai(
+    prompt: str,
+    history=None,
+    qualification=None
+) -> str:
 
     # =========================
     # 1. CERTIFICATION GUARD
@@ -214,7 +401,34 @@ def ask_ai(prompt: str, history=None) -> str:
 
 
     # =========================
-    # 3. BUILD RAG QUERY
+    # 3. EXPLICIT INTEREST GUARD
+    # =========================
+
+    interest_response = get_explicit_interest_response(
+        prompt
+    )
+
+    if interest_response is not None:
+        return interest_response
+
+
+    # =========================
+    # 4. QUALIFICATION MEMORY
+    # =========================
+
+    qualification_response = (
+        get_qualification_memory_response(
+            prompt,
+            qualification
+        )
+    )
+
+    if qualification_response is not None:
+        return qualification_response
+
+
+    # =========================
+    # 5. BUILD RAG QUERY
     # =========================
 
     retrieval_parts = []
@@ -255,7 +469,7 @@ def ask_ai(prompt: str, history=None) -> str:
 
 
     # =========================
-    # 4. RETRIEVE KNOWLEDGE
+    # 6. RETRIEVE KNOWLEDGE
     # =========================
 
     business_knowledge = retrieve_relevant_knowledge(
@@ -273,11 +487,48 @@ def ask_ai(prompt: str, history=None) -> str:
 
 
     # =========================
-    # 5. BUILD SYSTEM CONTEXT
+    # 7. BUILD QUALIFICATION CONTEXT
+    # =========================
+
+    if qualification:
+
+        qualification_context = f"""
+CURRENT STRUCTURED QUALIFICATION:
+
+Interest:
+{qualification.get("interest")}
+
+Budget:
+{qualification.get("budget")}
+
+Timeline:
+{qualification.get("timeline")}
+
+Requirement:
+{qualification.get("requirement")}
+"""
+
+    else:
+
+        qualification_context = """
+CURRENT STRUCTURED QUALIFICATION:
+
+No structured qualification data is currently available.
+"""
+
+
+    # =========================
+    # 8. BUILD SYSTEM CONTEXT
     # =========================
 
     system_content = f"""
 {SYSTEM_PROMPT}
+
+=========================
+CURRENT STRUCTURED QUALIFICATION
+=========================
+
+{qualification_context}
 
 =========================
 CURRENT APPROVED BUSINESS KNOWLEDGE
@@ -294,7 +545,18 @@ STRICT GROUNDING RULES:
 1. The CURRENT APPROVED BUSINESS KNOWLEDGE is the highest
    priority source for business facts.
 
-2. First determine what type of message the customer sent.
+2. The CURRENT STRUCTURED QUALIFICATION is the highest
+   priority source for the customer's current:
+   - interest
+   - budget
+   - timeline
+   - requirement
+
+3. If conversation history conflicts with the CURRENT
+   STRUCTURED QUALIFICATION, use the CURRENT STRUCTURED
+   QUALIFICATION.
+
+4. First determine what type of message the customer sent.
 
    TYPE A - BUSINESS INFORMATION QUESTION
 
@@ -330,62 +592,63 @@ STRICT GROUNDING RULES:
    - "I am available on Friday."
    - "You can contact me after 6 PM."
 
-3. BUSINESS INFORMATION QUESTIONS:
+5. BUSINESS INFORMATION QUESTIONS:
 
    If the customer asks for business-specific information,
    use ONLY the CURRENT APPROVED BUSINESS KNOWLEDGE.
 
-4. If the requested business information exists in the approved
+6. If the requested business information exists in the approved
    knowledge, answer directly using that information.
 
-5. When the requested business information is available,
+7. When the requested business information is available,
    DO NOT add any fallback message.
 
-6. If ALL business information specifically requested by the
+8. If ALL business information specifically requested by the
    customer is unavailable, reply exactly:
 
    "I don't have enough information to answer that yet."
 
-7. If the customer asks for multiple business details and only
+9. If the customer asks for multiple business details and only
    some are available:
    - Answer the available parts.
    - Clearly identify only the unavailable requested parts.
 
-8. CUSTOMER QUALIFICATION STATEMENTS:
+10. CUSTOMER QUALIFICATION STATEMENTS:
 
-   If the customer is telling you about their interest, budget,
-   timeline, requirement, career goal, or personal situation,
-   DO NOT use the missing-business-information fallback.
+    If the customer is telling you about their interest, budget,
+    timeline, requirement, career goal, or personal situation,
+    DO NOT use the missing-business-information fallback.
 
-9. For a qualification statement:
-   - Acknowledge the information naturally.
-   - Do not invent business facts.
-   - If a qualification question is necessary, ask at most ONE.
-   - Do not ask for information the customer already provided.
+11. For a qualification statement:
+    - Acknowledge the information naturally.
+    - Do not invent business facts.
+    - If a qualification question is necessary, ask at most ONE.
+    - Do not ask for information the customer already provided.
 
-10. GENERAL CONVERSATION:
+12. GENERAL CONVERSATION:
 
     Respond naturally to greetings, thanks, confirmations,
     and other normal conversation.
 
-11. Never invent business facts.
+13. Never invent business facts.
 
-12. Do not mention information that the customer did not ask for.
+14. Do not mention information that the customer did not ask for.
 
-13. Do not mention missing business information unless the
+15. Do not mention missing business information unless the
     customer actually requested that information.
 
-14. Previous conversation messages are for conversation context
+16. Previous conversation messages are for conversation context
     and memory.
 
-15. Do not repeat unrelated information from previous
+17. Do not repeat unrelated information from previous
     conversation history.
 
-16. If an older assistant message conflicts with CURRENT
-    APPROVED BUSINESS KNOWLEDGE or these current rules,
-    ignore the older assistant message.
+18. If an older assistant message conflicts with CURRENT
+    APPROVED BUSINESS KNOWLEDGE, CURRENT STRUCTURED
+    QUALIFICATION, or these current rules, ignore the older
+    assistant message.
 
-17. For follow-up questions such as:
+19. For follow-up questions such as:
     - "How long is it?"
     - "How much is it?"
     - "What about that?"
@@ -393,10 +656,10 @@ STRICT GROUNDING RULES:
     use recent conversation context to understand what
     the customer is referring to.
 
-18. Answer only the customer's CURRENT message unless they
+20. Answer only the customer's CURRENT message unless they
     explicitly refer to something discussed earlier.
 
-19. IMPORTANT PROVIDER RULE:
+21. IMPORTANT PROVIDER RULE:
 
     If the CURRENT customer message explicitly mentions AWS,
     answer the current business question about AWS.
@@ -408,10 +671,10 @@ STRICT GROUNDING RULES:
     must NOT override an explicitly named provider in the
     CURRENT business question.
 
-20. Asking about a provider does NOT automatically mean the
+22. Asking about a provider does NOT automatically mean the
     customer's qualification interest has changed.
 
-21. BUSINESS RESPONSE ENDING RULE:
+23. BUSINESS RESPONSE ENDING RULE:
 
     After answering a business-information question, STOP.
 
@@ -421,17 +684,17 @@ STRICT GROUNDING RULES:
     - "Do you want to know..."
     - "Can I help with anything else?"
 
-22. REPETITION RULE:
+24. REPETITION RULE:
 
     Do not state the same fact more than once in the same
     response.
 
-23. Keep the final answer concise, direct, and natural.
+25. Keep the final answer concise, direct, and natural.
 """
 
 
     # =========================
-    # 6. START MESSAGES
+    # 9. START MESSAGES
     # =========================
 
     messages = [
@@ -443,7 +706,7 @@ STRICT GROUNDING RULES:
 
 
     # =========================
-    # 7. ADD CONVERSATION MEMORY
+    # 10. ADD CONVERSATION MEMORY
     # =========================
 
     if history:
@@ -459,7 +722,7 @@ STRICT GROUNDING RULES:
 
 
     # =========================
-    # 8. REINFORCE CURRENT REQUEST
+    # 11. REINFORCE CURRENT REQUEST
     # =========================
 
     messages.append(
@@ -470,6 +733,32 @@ CURRENT CUSTOMER MESSAGE:
 
 {prompt}
 
+CURRENT STRUCTURED QUALIFICATION:
+
+Interest: {
+    qualification.get("interest")
+    if qualification
+    else None
+}
+
+Budget: {
+    qualification.get("budget")
+    if qualification
+    else None
+}
+
+Timeline: {
+    qualification.get("timeline")
+    if qualification
+    else None
+}
+
+Requirement: {
+    qualification.get("requirement")
+    if qualification
+    else None
+}
+
 RETRIEVED APPROVED KNOWLEDGE:
 
 {business_knowledge}
@@ -478,39 +767,46 @@ INSTRUCTIONS FOR THIS RESPONSE:
 
 1. Answer the CURRENT customer message.
 
-2. For business questions:
+2. Treat CURRENT STRUCTURED QUALIFICATION as the
+   authoritative source for the customer's current interest,
+   budget, timeline, and requirement.
+
+3. If an older conversation message conflicts with the
+   structured qualification, ignore the older value.
+
+4. For business questions:
    - Use only the retrieved approved knowledge.
    - Answer only what was asked.
    - Do not invent information.
    - Do not repeat information.
    - Do not ask an unnecessary follow-up question.
 
-3. For qualification statements:
+5. For qualification statements:
    - Acknowledge the information naturally.
    - Do not invent business information.
    - Ask at most ONE qualification question only if needed.
 
-4. If the CURRENT message explicitly says AWS:
+6. If the CURRENT message explicitly says AWS:
    answer the business question using AWS knowledge.
 
-5. If the CURRENT message explicitly says Azure:
+7. If the CURRENT message explicitly says Azure:
    answer the business question using Azure knowledge.
 
-6. Asking about AWS or Azure does NOT automatically change
+8. Asking about AWS or Azure does NOT automatically change
    the customer's saved qualification interest.
 
-7. Do not repeat unrelated previous conversation content.
+9. Do not repeat unrelated previous conversation content.
 
-8. Keep the response concise.
+10. Keep the response concise.
 
-9. After answering a business-information question, STOP.
+11. After answering a business-information question, STOP.
 """
         }
     )
 
 
     # =========================
-    # 9. ADD CURRENT MESSAGE
+    # 12. ADD CURRENT MESSAGE
     # =========================
 
     messages.append(
@@ -522,7 +818,7 @@ INSTRUCTIONS FOR THIS RESPONSE:
 
 
     # =========================
-    # 10. GENERATE AI RESPONSE
+    # 13. GENERATE AI RESPONSE
     # =========================
 
     try:

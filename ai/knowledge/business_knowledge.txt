@@ -102,6 +102,9 @@ The Azure Cloud Engineering course duration is 3 months.
 Course Fee:
 ₹25,000.
 
+Prerequisites:
+Basic computer knowledge is enough to start Azure Cloud Engineering.
+
 Azure Services Covered:
 - Azure Virtual Machines
 - Azure Blob Storage
@@ -140,17 +143,17 @@ The following Azure information is approved:
 - Course availability
 - Course duration: 3 months
 - Course fee: ₹25,000
+- Prerequisites: Basic computer knowledge is enough to start Azure Cloud Engineering.
 - Azure services covered
 - Certification support
 
 The following Azure information is NOT currently available:
 
-- Prerequisites
 - Training mode
 - Target students
 - Career support
 
-Do not copy AWS-specific prerequisites, training mode, target student,
+Do not copy AWS-specific training mode, target student,
 or career support information to Azure.
 
 
@@ -211,10 +214,12 @@ QUICK APPROVED FACTS
 AWS Cloud Engineering:
 - Duration: 3 months
 - Fee: ₹25,000
+- Prerequisites: Basic computer knowledge is enough to start.
 
 Azure Cloud Engineering:
 - Duration: 3 months
 - Fee: ₹25,000
+- Prerequisites: Basic computer knowledge is enough to start Azure Cloud Engineering.
 
 AWS Cloud Engineering duration is 3 months.
 
@@ -223,6 +228,12 @@ Azure Cloud Engineering duration is 3 months.
 AWS Cloud Engineering fee is ₹25,000.
 
 Azure Cloud Engineering fee is ₹25,000.
+
+AWS Cloud Engineering prerequisites:
+Basic computer knowledge is enough to start.
+
+Azure Cloud Engineering prerequisites:
+Basic computer knowledge is enough to start Azure Cloud Engineering.
 
 
 ==================================================
@@ -289,11 +300,32 @@ Answer:
 
 "The Azure Cloud Engineering course fee is ₹25,000."
 
+If the customer asks:
+
+"What are the AWS Cloud Engineering prerequisites?"
+
+Answer:
+
+"Basic computer knowledge is enough to start."
+
+If the customer asks:
+
+"What are the Azure Cloud Engineering prerequisites?"
+
+Answer:
+
+"Basic computer knowledge is enough to start Azure Cloud Engineering."
+
 Do not copy AWS-specific details to Azure unless the same information
 is explicitly approved for Azure.
 
 Do not copy Azure-specific details to AWS unless the same information
 is explicitly approved for AWS.
+
+Azure prerequisites are approved.
+
+Azure training mode, target students, and career support are not
+currently available.
 
 When answering certification questions, clearly distinguish between:
 

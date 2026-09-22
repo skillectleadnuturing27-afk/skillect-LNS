@@ -12,6 +12,7 @@ def has_personal_interest_intent(message: str) -> bool:
     interest_phrases = [
         "i am interested",
         "i'm interested",
+        "im interested",
         "i want to learn",
         "i want to study",
         "i want to join",
@@ -22,6 +23,7 @@ def has_personal_interest_intent(message: str) -> bool:
         "i plan to learn",
         "i want to take",
         "i would like to take",
+        "my interest is",
     ]
 
     return any(
@@ -86,19 +88,54 @@ def has_requirement_intent(message: str) -> bool:
     message_lower = message.lower()
 
     requirement_phrases = [
+        # -------------------------
+        # JOB
+        # -------------------------
         "i need a job",
         "i want a job",
         "i am looking for a job",
         "i'm looking for a job",
+        "im looking for a job",
         "i need this for a job",
         "i want this for a job",
+        "i need this course for a job",
+        "i want this course for a job",
+
+        # -------------------------
+        # CAREER SWITCH
+        # -------------------------
         "i want to switch career",
+        "i want to switch careers",
+        "i want to switch my career",
+        "i need to switch career",
+        "i need to switch careers",
+        "i need to switch my career",
         "i want a career switch",
+        "i need a career switch",
         "i am planning a career switch",
         "i'm planning a career switch",
+        "im planning a career switch",
+        "for a career switch",
+        "for career switch",
+        "for switching career",
+        "for switching careers",
+        "to switch career",
+        "to switch careers",
+        "to switch my career",
+        "career change",
+        "change my career",
+
+        # -------------------------
+        # SKILL DEVELOPMENT
+        # -------------------------
         "i want to improve my skills",
         "i need to improve my skills",
         "i want skill development",
+        "i need skill development",
+        "improve my skills",
+        "develop my skills",
+        "upgrade my skills",
+        "upskill",
     ]
 
     return any(
@@ -113,7 +150,7 @@ def has_requirement_intent(message: str) -> bool:
 
 def qualify_lead(message: str) -> dict:
 
-    message_lower = message.lower()
+    message_lower = message.lower().strip()
 
     qualification = {
         "interest": None,
@@ -129,6 +166,10 @@ def qualify_lead(message: str) -> dict:
 
     # A technology/course mention alone is NOT enough.
     # The customer must express personal interest.
+    #
+    # Example:
+    # "What is the AWS fee?" -> no interest change
+    # "I am interested in AWS." -> AWS
 
     if has_personal_interest_intent(message):
 
@@ -152,9 +193,8 @@ def qualify_lead(message: str) -> dict:
     # Only extract money when the customer is
     # talking about THEIR budget.
     #
-    # Example:
-    # "My budget is 20k."       -> qualification
-    # "Is the course fee 20k?"  -> NOT qualification
+    # "My budget is 20k."      -> 20000
+    # "Is the course fee 20k?" -> no budget change
 
     if has_budget_intent(message):
 
@@ -173,13 +213,17 @@ def qualify_lead(message: str) -> dict:
             qualification["budget"] = 30000
 
         else:
-            # Try to extract another numeric budget.
+
+            # Support another numeric budget such as:
+            # "My budget is 25000."
+
             budget_match = re.search(
                 r"\b(\d{4,6})\b",
                 message_lower.replace(",", "")
             )
 
             if budget_match:
+
                 qualification["budget"] = int(
                     budget_match.group(1)
                 )
@@ -189,8 +233,8 @@ def qualify_lead(message: str) -> dict:
     # TIMELINE
     # =========================
 
-    # Timeline is updated only when the customer
-    # talks about THEIR intended starting time.
+    # Timeline changes only when the customer
+    # describes THEIR intended starting time.
 
     if has_timeline_intent(message):
 
@@ -214,24 +258,57 @@ def qualify_lead(message: str) -> dict:
     # REQUIREMENT
     # =========================
 
-    # A word like "job" alone is NOT enough.
+    # Requirement changes only when the customer
+    # expresses a personal goal.
     #
-    # "Do you provide job support?" -> no change
-    # "I need a job."               -> Job
+    # "Do you provide job support?"
+    # -> no requirement change
+    #
+    # "I need a job."
+    # -> Job
+    #
+    # "I need this course for a career switch."
+    # -> Career switch
 
     if has_requirement_intent(message):
 
-        if (
-            "career switch" in message_lower
-            or "switch career" in message_lower
+        # -------------------------
+        # CAREER SWITCH
+        # -------------------------
+
+        career_switch_phrases = [
+            "career switch",
+            "switch career",
+            "switch careers",
+            "switch my career",
+            "switching career",
+            "switching careers",
+            "career change",
+            "change my career",
+        ]
+
+        if any(
+            phrase in message_lower
+            for phrase in career_switch_phrases
         ):
             qualification["requirement"] = "Career switch"
+
+        # -------------------------
+        # SKILL DEVELOPMENT
+        # -------------------------
 
         elif (
             "improve my skills" in message_lower
             or "skill development" in message_lower
+            or "develop my skills" in message_lower
+            or "upgrade my skills" in message_lower
+            or "upskill" in message_lower
         ):
             qualification["requirement"] = "Skill development"
+
+        # -------------------------
+        # JOB
+        # -------------------------
 
         elif "job" in message_lower:
             qualification["requirement"] = "Job"
@@ -253,8 +330,10 @@ def merge_qualification(
 
     for key, value in new_qualification.items():
 
-        # Preserve previous qualification unless
-        # the customer provides new qualification data.
+        # Preserve the previous qualification value
+        # unless the customer explicitly provides
+        # a new qualification value.
+
         if value is not None:
             merged[key] = value
 

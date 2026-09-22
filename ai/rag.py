@@ -3,13 +3,27 @@ import re
 
 
 # =========================
-# KNOWLEDGE FILE PATH
+# KNOWLEDGE FOLDER
 # =========================
 
-KNOWLEDGE_FILE = (
+KNOWLEDGE_FOLDER = (
     Path(__file__).parent
     / "knowledge"
+)
+
+
+# =========================
+# KNOWLEDGE FILE PATHS
+# =========================
+
+BUSINESS_KNOWLEDGE_FILE = (
+    KNOWLEDGE_FOLDER
     / "business_knowledge.txt"
+)
+
+INTRO_KNOWLEDGE_FILE = (
+    KNOWLEDGE_FOLDER
+    / "intro_knowledge.txt"
 )
 
 
@@ -19,10 +33,24 @@ KNOWLEDGE_FILE = (
 
 def load_business_knowledge() -> str:
 
-    if not KNOWLEDGE_FILE.exists():
+    if not BUSINESS_KNOWLEDGE_FILE.exists():
         return ""
 
-    return KNOWLEDGE_FILE.read_text(
+    return BUSINESS_KNOWLEDGE_FILE.read_text(
+        encoding="utf-8"
+    )
+
+
+# =========================
+# LOAD INTRO KNOWLEDGE
+# =========================
+
+def load_intro_knowledge() -> str:
+
+    if not INTRO_KNOWLEDGE_FILE.exists():
+        return ""
+
+    return INTRO_KNOWLEDGE_FILE.read_text(
         encoding="utf-8"
     )
 
@@ -39,6 +67,62 @@ def normalize_words(text: str) -> set[str]:
     )
 
     return set(words)
+
+
+# =========================
+# DETECT INTRO / GREETING
+# =========================
+
+def is_intro_query(query: str) -> bool:
+
+    query_lower = query.lower().strip()
+
+    # Remove basic punctuation so:
+    # "Hi!" -> "hi"
+    # "Hello?" -> "hello"
+    clean_query = re.sub(
+        r"[^\w\s]",
+        "",
+        query_lower
+    ).strip()
+
+    greeting_phrases = [
+        "hi",
+        "hello",
+        "hey",
+        "hai",
+        "hii",
+        "hiii",
+        "good morning",
+        "good afternoon",
+        "good evening",
+    ]
+
+    intro_phrases = [
+        "tell me about skillect",
+        "what is skillect",
+        "who is skillect",
+        "introduce skillect",
+        "introduction about skillect",
+        "about skillect",
+        "tell me about your organization",
+        "tell me about your organisation",
+        "tell me about your company",
+        "what does skillect do",
+    ]
+
+    # Exact greeting
+    if clean_query in greeting_phrases:
+        return True
+
+    # Introduction question
+    if any(
+        phrase in clean_query
+        for phrase in intro_phrases
+    ):
+        return True
+
+    return False
 
 
 # =========================
@@ -224,6 +308,22 @@ def expand_query(query: str) -> str:
         ])
 
     # =========================
+    # INTRODUCTION
+    # =========================
+
+    if is_intro_query(query):
+
+        extra_words.extend([
+            "skillect",
+            "organization",
+            "company",
+            "introduction",
+            "welcome",
+            "cloud",
+            "training"
+        ])
+
+    # =========================
     # DURATION
     # =========================
 
@@ -231,6 +331,7 @@ def expand_query(query: str) -> str:
         "how long" in query_lower
         or "duration" in query_lower
         or "length" in query_lower
+        or "how many months" in query_lower
     ):
 
         extra_words.extend([
@@ -415,6 +516,27 @@ def retrieve_relevant_knowledge(
     query: str
 ) -> str:
 
+    # =========================
+    # INTRO / GREETING
+    # =========================
+
+    # Check this first so a simple greeting
+    # retrieves intro_knowledge.txt instead
+    # of unrelated AWS/Azure information.
+
+    if is_intro_query(query):
+
+        intro_knowledge = (
+            load_intro_knowledge()
+        )
+
+        if intro_knowledge:
+            return intro_knowledge.strip()
+
+    # =========================
+    # BUSINESS KNOWLEDGE
+    # =========================
+
     blocks = get_knowledge_blocks()
 
     general = blocks["general"]
@@ -453,7 +575,6 @@ def retrieve_relevant_knowledge(
             selected
         )
 
-
     # =========================
     # AZURE-SPECIFIC QUESTION
     # =========================
@@ -480,7 +601,6 @@ def retrieve_relevant_knowledge(
         return "\n\n".join(
             selected
         )
-
 
     # =========================
     # GENERAL COURSE QUESTION
@@ -510,7 +630,6 @@ def retrieve_relevant_knowledge(
         return "\n\n".join(
             selected
         )
-
 
     # =========================
     # NO PROVIDER SPECIFIED

@@ -4,6 +4,15 @@ from ai.rag import retrieve_relevant_knowledge
 
 
 # =========================
+# CONSTANTS
+# =========================
+
+BUSINESS_FALLBACK = (
+    "I don't have enough information to answer that yet."
+)
+
+
+# =========================
 # SYSTEM PROMPT
 # =========================
 
@@ -51,6 +60,8 @@ Rules:
 18. Do not repeat the same information multiple times in one response.
 19. Give each important fact only once unless repetition is required
     to avoid misunderstanding.
+20. If the customer requests a business detail that is explicitly
+    unavailable, do not substitute other available information.
 """
 
 
@@ -81,10 +92,6 @@ def get_certification_response(prompt: str):
     if not is_certification_message:
         return None
 
-    # -------------------------
-    # AWS CERTIFICATION
-    # -------------------------
-
     if "aws" in prompt_lower or "amazon" in prompt_lower:
 
         return (
@@ -95,10 +102,6 @@ def get_certification_response(prompt: str):
             "certification examination. Skillect does not directly "
             "issue the official AWS certification."
         )
-
-    # -------------------------
-    # AZURE CERTIFICATION
-    # -------------------------
 
     if (
         "azure" in prompt_lower
@@ -114,10 +117,6 @@ def get_certification_response(prompt: str):
             "does not directly issue the official Microsoft Azure "
             "certification."
         )
-
-    # -------------------------
-    # GENERAL CERTIFICATION
-    # -------------------------
 
     return (
         "Skillect provides training and examination preparation "
@@ -209,26 +208,88 @@ def get_explicit_interest_response(prompt: str):
     if not is_interest_statement:
         return None
 
-    # -------------------------
-    # AWS INTEREST
-    # -------------------------
-
     if "aws" in prompt_lower or "amazon" in prompt_lower:
-
         return (
             "Great. You're interested in "
             "AWS Cloud Engineering."
         )
 
-    # -------------------------
-    # AZURE INTEREST
-    # -------------------------
-
     if "azure" in prompt_lower:
-
         return (
             "Great. You're interested in "
             "Azure Cloud Engineering."
+        )
+
+    return None
+
+
+# =========================
+# REQUIREMENT ACKNOWLEDGEMENT
+# =========================
+
+def get_requirement_response(
+    prompt: str,
+    qualification=None
+):
+
+    prompt_lower = prompt.lower().strip()
+
+    career_switch_phrases = [
+        "career switch",
+        "switch career",
+        "switch careers",
+        "switch my career",
+        "switching career",
+        "switching careers",
+        "career change",
+        "change my career",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in career_switch_phrases
+    ):
+        return (
+            "Got it. You're looking to make "
+            "a career switch."
+        )
+
+    skill_phrases = [
+        "improve my skills",
+        "skill development",
+        "develop my skills",
+        "upgrade my skills",
+        "upskill",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in skill_phrases
+    ):
+        return (
+            "Got it. You're looking to improve "
+            "your skills."
+        )
+
+    job_phrases = [
+        "i need a job",
+        "i want a job",
+        "i am looking for a job",
+        "i'm looking for a job",
+        "im looking for a job",
+        "i need this for a job",
+        "i want this for a job",
+        "i need this course for a job",
+        "i want this course for a job",
+    ]
+
+    if any(
+        phrase in prompt_lower
+        for phrase in job_phrases
+    ):
+        return (
+            "Got it. Your current requirement "
+            "is a job."
         )
 
     return None
@@ -367,6 +428,67 @@ def get_qualification_memory_response(
 
 
 # =========================
+# UNAVAILABLE BUSINESS GUARD
+# =========================
+
+def get_unavailable_business_response(prompt: str):
+
+    prompt_lower = prompt.lower().strip()
+
+    is_azure = "azure" in prompt_lower
+
+    if not is_azure:
+        return None
+
+    # Azure prerequisite is an approved answer.
+    prerequisite_phrases = [
+        "prerequisite",
+        "prerequisites",
+        "requirement to join",
+        "requirements to join",
+        "required to join",
+        "need to know before",
+        "knowledge required",
+    ]
+
+    if any(phrase in prompt_lower for phrase in prerequisite_phrases):
+        return (
+            "Basic computer knowledge is enough to start "
+            "Azure Cloud Engineering."
+        )
+
+    # These Azure details are still unavailable.
+    unavailable_azure_topics = [
+        "training mode",
+        "class mode",
+        "course mode",
+        "online class",
+        "offline class",
+        "online training",
+        "offline training",
+        "instructor-led",
+        "target student",
+        "target students",
+        "who can join",
+        "who should join",
+        "who is this course for",
+        "suitable for",
+        "career support",
+        "job support",
+        "placement support",
+        "interview preparation",
+        "interview support",
+        "project guidance",
+        "career guidance",
+    ]
+
+    if any(phrase in prompt_lower for phrase in unavailable_azure_topics):
+        return BUSINESS_FALLBACK
+
+    return None
+
+
+# =========================
 # ASK AI
 # =========================
 
@@ -387,7 +509,6 @@ def ask_ai(
     if certification_response is not None:
         return certification_response
 
-
     # =========================
     # 2. CONTACT GUARD
     # =========================
@@ -398,7 +519,6 @@ def ask_ai(
 
     if contact_response is not None:
         return contact_response
-
 
     # =========================
     # 3. EXPLICIT INTEREST GUARD
@@ -411,9 +531,20 @@ def ask_ai(
     if interest_response is not None:
         return interest_response
 
+    # =========================
+    # 4. REQUIREMENT GUARD
+    # =========================
+
+    requirement_response = get_requirement_response(
+        prompt,
+        qualification
+    )
+
+    if requirement_response is not None:
+        return requirement_response
 
     # =========================
-    # 4. QUALIFICATION MEMORY
+    # 5. QUALIFICATION MEMORY
     # =========================
 
     qualification_response = (
@@ -426,17 +557,33 @@ def ask_ai(
     if qualification_response is not None:
         return qualification_response
 
+    # =========================
+    # 6. UNAVAILABLE BUSINESS GUARD
+    # =========================
+
+    unavailable_response = (
+        get_unavailable_business_response(prompt)
+    )
+
+    if unavailable_response is not None:
+        return unavailable_response
 
     # =========================
-    # 5. BUILD RAG QUERY
+    # 7. BUILD RAG QUERY
     # =========================
 
     retrieval_parts = []
 
     prompt_lower = prompt.lower()
 
-    current_mentions_aws = "aws" in prompt_lower
-    current_mentions_azure = "azure" in prompt_lower
+    current_mentions_aws = (
+        "aws" in prompt_lower
+        or "amazon" in prompt_lower
+    )
+
+    current_mentions_azure = (
+        "azure" in prompt_lower
+    )
 
     current_has_explicit_provider = (
         current_mentions_aws
@@ -467,9 +614,8 @@ def ask_ai(
             retrieval_parts
         )
 
-
     # =========================
-    # 6. RETRIEVE KNOWLEDGE
+    # 8. RETRIEVE KNOWLEDGE
     # =========================
 
     business_knowledge = retrieve_relevant_knowledge(
@@ -485,16 +631,13 @@ def ask_ai(
             "NO RELEVANT APPROVED BUSINESS INFORMATION FOUND."
         )
 
-
     # =========================
-    # 7. BUILD QUALIFICATION CONTEXT
+    # 9. BUILD QUALIFICATION CONTEXT
     # =========================
 
     if qualification:
 
         qualification_context = f"""
-CURRENT STRUCTURED QUALIFICATION:
-
 Interest:
 {qualification.get("interest")}
 
@@ -511,14 +654,11 @@ Requirement:
     else:
 
         qualification_context = """
-CURRENT STRUCTURED QUALIFICATION:
-
 No structured qualification data is currently available.
 """
 
-
     # =========================
-    # 8. BUILD SYSTEM CONTEXT
+    # 10. BUILD SYSTEM CONTEXT
     # =========================
 
     system_content = f"""
@@ -542,159 +682,66 @@ END OF APPROVED BUSINESS KNOWLEDGE
 
 STRICT GROUNDING RULES:
 
-1. The CURRENT APPROVED BUSINESS KNOWLEDGE is the highest
-   priority source for business facts.
+1. CURRENT APPROVED BUSINESS KNOWLEDGE is the authoritative
+   source for business facts.
 
-2. The CURRENT STRUCTURED QUALIFICATION is the highest
-   priority source for the customer's current:
+2. CURRENT STRUCTURED QUALIFICATION is the authoritative
+   source for the customer's:
    - interest
    - budget
    - timeline
    - requirement
 
-3. If conversation history conflicts with the CURRENT
-   STRUCTURED QUALIFICATION, use the CURRENT STRUCTURED
-   QUALIFICATION.
+3. If history conflicts with structured qualification,
+   use structured qualification.
 
-4. First determine what type of message the customer sent.
+4. For a business-information question, answer ONLY the
+   information specifically requested.
 
-   TYPE A - BUSINESS INFORMATION QUESTION
+5. Do not substitute another available business fact when
+   the requested fact is unavailable.
 
-   Examples:
-   - "How much is the course?"
-   - "How long is the course?"
-   - "What AWS topics will I learn?"
-   - "Do you provide a discount?"
-   - "Is the training online?"
+7. If requested information exists in approved knowledge,
+   answer directly.
 
-   TYPE B - CUSTOMER QUALIFICATION STATEMENT
+8. If all specifically requested business information is
+   unavailable, answer exactly:
 
-   Examples:
-   - "My budget is 20k."
-   - "I need a job."
-   - "I can start immediately."
-   - "I am interested in AWS."
-   - "I want to switch my career."
+   "{BUSINESS_FALLBACK}"
 
-   TYPE C - GENERAL CONVERSATION
+9. Never invent business facts.
 
-   Examples:
-   - "Hello"
-   - "Okay"
-   - "Thanks"
-   - "I understand"
+10. Qualification statements are not business-information
+    questions.
 
-   TYPE D - CONTACT AVAILABILITY
+11. A qualification statement should be acknowledged
+    naturally.
 
-   Examples:
-   - "I am free this week. You can contact me."
-   - "Call me tomorrow."
-   - "I am available on Friday."
-   - "You can contact me after 6 PM."
+12. Do not change qualification merely because a customer
+    asks a factual question about AWS or Azure.
 
-5. BUSINESS INFORMATION QUESTIONS:
+13. If the CURRENT message explicitly mentions AWS, use
+    AWS business knowledge for that business question.
 
-   If the customer asks for business-specific information,
-   use ONLY the CURRENT APPROVED BUSINESS KNOWLEDGE.
+14. If the CURRENT message explicitly mentions Azure, use
+    Azure business knowledge for that business question.
 
-6. If the requested business information exists in the approved
-   knowledge, answer directly using that information.
+15. A saved interest must not override a provider explicitly
+    named in the current business question.
 
-7. When the requested business information is available,
-   DO NOT add any fallback message.
+16. Do not repeat unrelated conversation history.
 
-8. If ALL business information specifically requested by the
-   customer is unavailable, reply exactly:
+17. Do not mention information the customer did not ask for.
 
-   "I don't have enough information to answer that yet."
+18. Do not add unnecessary follow-up questions.
 
-9. If the customer asks for multiple business details and only
-   some are available:
-   - Answer the available parts.
-   - Clearly identify only the unavailable requested parts.
+19. After answering a business-information question, STOP.
 
-10. CUSTOMER QUALIFICATION STATEMENTS:
-
-    If the customer is telling you about their interest, budget,
-    timeline, requirement, career goal, or personal situation,
-    DO NOT use the missing-business-information fallback.
-
-11. For a qualification statement:
-    - Acknowledge the information naturally.
-    - Do not invent business facts.
-    - If a qualification question is necessary, ask at most ONE.
-    - Do not ask for information the customer already provided.
-
-12. GENERAL CONVERSATION:
-
-    Respond naturally to greetings, thanks, confirmations,
-    and other normal conversation.
-
-13. Never invent business facts.
-
-14. Do not mention information that the customer did not ask for.
-
-15. Do not mention missing business information unless the
-    customer actually requested that information.
-
-16. Previous conversation messages are for conversation context
-    and memory.
-
-17. Do not repeat unrelated information from previous
-    conversation history.
-
-18. If an older assistant message conflicts with CURRENT
-    APPROVED BUSINESS KNOWLEDGE, CURRENT STRUCTURED
-    QUALIFICATION, or these current rules, ignore the older
-    assistant message.
-
-19. For follow-up questions such as:
-    - "How long is it?"
-    - "How much is it?"
-    - "What about that?"
-
-    use recent conversation context to understand what
-    the customer is referring to.
-
-20. Answer only the customer's CURRENT message unless they
-    explicitly refer to something discussed earlier.
-
-21. IMPORTANT PROVIDER RULE:
-
-    If the CURRENT customer message explicitly mentions AWS,
-    answer the current business question about AWS.
-
-    If the CURRENT customer message explicitly mentions Azure,
-    answer the current business question about Azure.
-
-    A saved qualification interest from previous conversation
-    must NOT override an explicitly named provider in the
-    CURRENT business question.
-
-22. Asking about a provider does NOT automatically mean the
-    customer's qualification interest has changed.
-
-23. BUSINESS RESPONSE ENDING RULE:
-
-    After answering a business-information question, STOP.
-
-    Do NOT end with:
-    - "Would you like to know more?"
-    - "Would you like information about..."
-    - "Do you want to know..."
-    - "Can I help with anything else?"
-
-24. REPETITION RULE:
-
-    Do not state the same fact more than once in the same
-    response.
-
-25. Keep the final answer concise, direct, and natural.
+20. Keep the final response concise and direct.
 """
 
-
     # =========================
-    # 9. START MESSAGES
+    # 11. START MESSAGES
     # =========================
 
     messages = [
@@ -704,9 +751,8 @@ STRICT GROUNDING RULES:
         }
     ]
 
-
     # =========================
-    # 10. ADD CONVERSATION MEMORY
+    # 12. ADD CONVERSATION MEMORY
     # =========================
 
     if history:
@@ -720,9 +766,8 @@ STRICT GROUNDING RULES:
                 }
             )
 
-
     # =========================
-    # 11. REINFORCE CURRENT REQUEST
+    # 13. REINFORCE CURRENT REQUEST
     # =========================
 
     messages.append(
@@ -763,50 +808,45 @@ RETRIEVED APPROVED KNOWLEDGE:
 
 {business_knowledge}
 
-INSTRUCTIONS FOR THIS RESPONSE:
+FINAL RESPONSE RULES:
 
-1. Answer the CURRENT customer message.
+1. Answer only the CURRENT customer message.
 
-2. Treat CURRENT STRUCTURED QUALIFICATION as the
-   authoritative source for the customer's current interest,
-   budget, timeline, and requirement.
+2. Use only approved knowledge for business facts.
 
-3. If an older conversation message conflicts with the
-   structured qualification, ignore the older value.
+3. If the specifically requested business fact is unavailable,
+   do not replace it with other available facts.
 
-4. For business questions:
-   - Use only the retrieved approved knowledge.
-   - Answer only what was asked.
-   - Do not invent information.
-   - Do not repeat information.
-   - Do not ask an unnecessary follow-up question.
+4. If the requested business information is unavailable,
+   reply exactly:
 
-5. For qualification statements:
-   - Acknowledge the information naturally.
-   - Do not invent business information.
-   - Ask at most ONE qualification question only if needed.
+   "{BUSINESS_FALLBACK}"
 
-6. If the CURRENT message explicitly says AWS:
-   answer the business question using AWS knowledge.
+5. If AWS is explicitly named in the current question,
+   use AWS information.
 
-7. If the CURRENT message explicitly says Azure:
-   answer the business question using Azure knowledge.
+6. If Azure is explicitly named in the current question,
+   use Azure information.
 
-8. Asking about AWS or Azure does NOT automatically change
-   the customer's saved qualification interest.
+7. The customer's saved qualification interest does not
+   override the provider named in the current question.
 
-9. Do not repeat unrelated previous conversation content.
+8. Asking a factual question about AWS or Azure does not
+   automatically change the saved interest.
 
-10. Keep the response concise.
+9. Do not repeat unrelated history.
 
-11. After answering a business-information question, STOP.
+10. Do not invent information.
+
+11. Do not add unnecessary follow-up questions.
+
+12. Keep the response concise.
 """
         }
     )
 
-
     # =========================
-    # 12. ADD CURRENT MESSAGE
+    # 14. ADD CURRENT MESSAGE
     # =========================
 
     messages.append(
@@ -816,9 +856,8 @@ INSTRUCTIONS FOR THIS RESPONSE:
         }
     )
 
-
     # =========================
-    # 13. GENERATE AI RESPONSE
+    # 15. GENERATE AI RESPONSE
     # =========================
 
     try:
@@ -840,7 +879,6 @@ INSTRUCTIONS FOR THIS RESPONSE:
 
         return ai_message.strip()
 
-
     # =========================
     # OLLAMA CONNECTION FAILURE
     # =========================
@@ -854,7 +892,6 @@ INSTRUCTIONS FOR THIS RESPONSE:
         raise RuntimeError(
             "AI service is temporarily unavailable"
         ) from error
-
 
     # =========================
     # OTHER OLLAMA FAILURE

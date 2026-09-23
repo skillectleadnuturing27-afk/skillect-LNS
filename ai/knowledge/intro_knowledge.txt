@@ -1,6 +1,6 @@
 SKILLECT - INTRODUCTION KNOWLEDGE
 
-1. Hi sir, welcome to Skillect Organization.
+1. Hi , welcome to Skillect Organization.
 2. We are happy to assist you with your enquiry.
 3. Skillect provides Cloud Computing Training for students and beginners.
 4. We currently offer AWS Cloud Engineering and Azure Cloud Engineering courses.

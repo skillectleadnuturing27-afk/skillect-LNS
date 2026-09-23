@@ -6,6 +6,7 @@ import models
 from database import SessionLocal
 
 from ai.LLM import ask_ai
+from ai.router import route_message
 from ai.qualification import qualify_lead, merge_qualification
 from ai.scoring import calculate_lead_score
 from ai.schemas import ChatRequest, ChatResponse
@@ -127,30 +128,47 @@ def chat(
 
 
     # =========================
-    # 6. GENERATE AI RESPONSE
+    # 6. FAST ROUTER
     # =========================
 
-    try:
+    # First check whether this message can be
+    # answered directly without using Ollama.
 
-        ai_response = ask_ai(
-            request.message,
-            history,
-            qualification
-        )
+    direct_response = route_message(
+        request.message
+    )
 
-    except RuntimeError as error:
+    if direct_response is not None:
 
-        # Remove any uncommitted DB state
-        db.rollback()
+        ai_response = direct_response
 
-        raise HTTPException(
-            status_code=503,
-            detail="AI service is temporarily unavailable"
-        ) from error
+    else:
+
+        # =========================
+        # 7. COMPLEX MESSAGE
+        # RAG + OLLAMA
+        # =========================
+
+        try:
+
+            ai_response = ask_ai(
+                request.message,
+                history,
+                qualification
+            )
+
+        except RuntimeError as error:
+
+            db.rollback()
+
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily unavailable"
+            ) from error
 
 
     # =========================
-    # 7. PREPARE DATABASE CHANGES
+    # 8. PREPARE DATABASE CHANGES
     # =========================
 
     lead.lead_score = scoring["score"]
@@ -173,7 +191,7 @@ def chat(
 
 
     # =========================
-    # 8. SAVE EVERYTHING
+    # 9. SAVE EVERYTHING
     # =========================
 
     try:
@@ -191,14 +209,14 @@ def chat(
 
 
     # =========================
-    # 9. REFRESH LEAD
+    # 10. REFRESH LEAD
     # =========================
 
     db.refresh(lead)
 
 
     # =========================
-    # 10. RETURN RESPONSE
+    # 11. RETURN RESPONSE
     # =========================
 
     return {

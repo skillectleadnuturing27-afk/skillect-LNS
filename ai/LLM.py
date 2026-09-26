@@ -1,3 +1,4 @@
+import time
 import ollama
 
 from ai.rag import retrieve_relevant_knowledge
@@ -11,6 +12,8 @@ BUSINESS_FALLBACK = (
     "I don't have enough information to answer that yet."
 )
 
+MAX_LLM_HISTORY = 8
+
 
 # =========================
 # SYSTEM PROMPT
@@ -23,45 +26,64 @@ Your job is to communicate with potential customers and understand
 their requirements.
 
 Rules:
+
 1. Be professional, friendly, and concise.
+
 2. Help the customer with their enquiry.
+
 3. Ask only one qualification question at a time when a qualification
    question is actually needed.
+
 4. Try to understand the customer's:
    - interest
    - budget
    - timeline
    - requirement
+
 5. For business-specific questions, use ONLY the approved business
    knowledge provided in the BUSINESS KNOWLEDGE section.
+
 6. Never invent business information, prices, course details,
    discounts, guarantees, services, or policies.
+
 7. Do not pressure the customer.
+
 8. Keep responses easy to understand.
+
 9. Distinguish between a customer QUESTION and a customer STATEMENT.
+
 10. A customer statement about their interest, budget, timeline,
     requirement, career goal, situation, or contact availability
     does NOT require business knowledge.
-11. When the customer provides qualification information, acknowledge
-    it naturally.
+
+11. When the customer provides qualification information,
+    acknowledge it naturally.
+
 12. Do not use the business-information fallback just because a
     qualification statement is not present in the knowledge base.
+
 13. If the customer says when they are available to be contacted,
     acknowledge their availability naturally.
+
 14. Never claim that you have scheduled a call, booked an appointment,
     sent a message, contacted the customer, or will contact the
     customer later unless the application actually provides that
     capability.
+
 15. Never claim that the customer provided contact information unless
     that information is actually present in the conversation.
+
 16. For business-information questions, answer the customer's question
     directly and stop after answering it.
+
 17. Do not add unnecessary follow-up questions.
+
 18. Do not repeat the same information multiple times in one response.
+
 19. Give each important fact only once unless repetition is required
     to avoid misunderstanding.
-20. If the customer requests a business detail that is explicitly
-    unavailable, do not substitute other available information.
+
+20. If requested business information is unavailable, do not invent it.
 """
 
 
@@ -92,8 +114,8 @@ def get_certification_response(prompt: str):
     if not is_certification_message:
         return None
 
+    # AWS
     if "aws" in prompt_lower or "amazon" in prompt_lower:
-
         return (
             "Yes. Skillect provides training and examination "
             "preparation support for relevant official AWS "
@@ -103,11 +125,11 @@ def get_certification_response(prompt: str):
             "issue the official AWS certification."
         )
 
+    # AZURE
     if (
         "azure" in prompt_lower
         or "microsoft" in prompt_lower
     ):
-
         return (
             "Yes. Skillect provides training and examination "
             "preparation support for relevant official Microsoft "
@@ -118,6 +140,7 @@ def get_certification_response(prompt: str):
             "certification."
         )
 
+    # GENERAL
     return (
         "Skillect provides training and examination preparation "
         "support for relevant AWS and Microsoft Azure certification "
@@ -327,7 +350,6 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in interest_questions
     ):
-
         interest = qualification.get("interest")
 
         if interest:
@@ -357,7 +379,6 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in budget_questions
     ):
-
         budget = qualification.get("budget")
 
         if budget is not None:
@@ -382,7 +403,6 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in timeline_questions
     ):
-
         timeline = qualification.get("timeline")
 
         if timeline:
@@ -411,7 +431,6 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in requirement_questions
     ):
-
         requirement = qualification.get("requirement")
 
         if requirement:
@@ -428,67 +447,6 @@ def get_qualification_memory_response(
 
 
 # =========================
-# UNAVAILABLE BUSINESS GUARD
-# =========================
-
-def get_unavailable_business_response(prompt: str):
-
-    prompt_lower = prompt.lower().strip()
-
-    is_azure = "azure" in prompt_lower
-
-    if not is_azure:
-        return None
-
-    # Azure prerequisite is an approved answer.
-    prerequisite_phrases = [
-        "prerequisite",
-        "prerequisites",
-        "requirement to join",
-        "requirements to join",
-        "required to join",
-        "need to know before",
-        "knowledge required",
-    ]
-
-    if any(phrase in prompt_lower for phrase in prerequisite_phrases):
-        return (
-            "Basic computer knowledge is enough to start "
-            "Azure Cloud Engineering."
-        )
-
-    # These Azure details are still unavailable.
-    unavailable_azure_topics = [
-        "training mode",
-        "class mode",
-        "course mode",
-        "online class",
-        "offline class",
-        "online training",
-        "offline training",
-        "instructor-led",
-        "target student",
-        "target students",
-        "who can join",
-        "who should join",
-        "who is this course for",
-        "suitable for",
-        "career support",
-        "job support",
-        "placement support",
-        "interview preparation",
-        "interview support",
-        "project guidance",
-        "career guidance",
-    ]
-
-    if any(phrase in prompt_lower for phrase in unavailable_azure_topics):
-        return BUSINESS_FALLBACK
-
-    return None
-
-
-# =========================
 # ASK AI
 # =========================
 
@@ -497,6 +455,8 @@ def ask_ai(
     history=None,
     qualification=None
 ) -> str:
+
+    total_llm_start = time.perf_counter()
 
     # =========================
     # 1. CERTIFICATION GUARD
@@ -558,18 +518,7 @@ def ask_ai(
         return qualification_response
 
     # =========================
-    # 6. UNAVAILABLE BUSINESS GUARD
-    # =========================
-
-    unavailable_response = (
-        get_unavailable_business_response(prompt)
-    )
-
-    if unavailable_response is not None:
-        return unavailable_response
-
-    # =========================
-    # 7. BUILD RAG QUERY
+    # 6. BUILD RAG QUERY
     # =========================
 
     retrieval_parts = []
@@ -591,13 +540,10 @@ def ask_ai(
     )
 
     if current_has_explicit_provider:
-
         retrieval_query = prompt
 
     else:
-
         if history:
-
             recent_user_messages = [
                 item.message
                 for item in history
@@ -615,11 +561,19 @@ def ask_ai(
         )
 
     # =========================
-    # 8. RETRIEVE KNOWLEDGE
+    # 7. RETRIEVE KNOWLEDGE
     # =========================
+
+    rag_start = time.perf_counter()
 
     business_knowledge = retrieve_relevant_knowledge(
         retrieval_query
+    )
+
+    rag_time = time.perf_counter() - rag_start
+
+    print(
+        f"RAG TIME: {rag_time:.3f} seconds"
     )
 
     knowledge_found = bool(
@@ -632,11 +586,10 @@ def ask_ai(
         )
 
     # =========================
-    # 9. BUILD QUALIFICATION CONTEXT
+    # 8. BUILD QUALIFICATION CONTEXT
     # =========================
 
     if qualification:
-
         qualification_context = f"""
 Interest:
 {qualification.get("interest")}
@@ -652,14 +605,15 @@ Requirement:
 """
 
     else:
-
         qualification_context = """
 No structured qualification data is currently available.
 """
 
     # =========================
-    # 10. BUILD SYSTEM CONTEXT
+    # 9. BUILD SYSTEM CONTEXT
     # =========================
+
+    prompt_build_start = time.perf_counter()
 
     system_content = f"""
 {SYSTEM_PROMPT}
@@ -701,47 +655,47 @@ STRICT GROUNDING RULES:
 5. Do not substitute another available business fact when
    the requested fact is unavailable.
 
-7. If requested information exists in approved knowledge,
+6. If requested information exists in approved knowledge,
    answer directly.
 
-8. If all specifically requested business information is
+7. If all specifically requested business information is
    unavailable, answer exactly:
 
    "{BUSINESS_FALLBACK}"
 
-9. Never invent business facts.
+8. Never invent business facts.
 
-10. Qualification statements are not business-information
-    questions.
+9. Qualification statements are not business-information
+   questions.
 
-11. A qualification statement should be acknowledged
+10. A qualification statement should be acknowledged
     naturally.
 
-12. Do not change qualification merely because a customer
+11. Do not change qualification merely because a customer
     asks a factual question about AWS or Azure.
 
-13. If the CURRENT message explicitly mentions AWS, use
+12. If the CURRENT message explicitly mentions AWS, use
     AWS business knowledge for that business question.
 
-14. If the CURRENT message explicitly mentions Azure, use
+13. If the CURRENT message explicitly mentions Azure, use
     Azure business knowledge for that business question.
 
-15. A saved interest must not override a provider explicitly
+14. A saved interest must not override a provider explicitly
     named in the current business question.
 
-16. Do not repeat unrelated conversation history.
+15. Do not repeat unrelated conversation history.
 
-17. Do not mention information the customer did not ask for.
+16. Do not mention information the customer did not ask for.
 
-18. Do not add unnecessary follow-up questions.
+17. Do not add unnecessary follow-up questions.
 
-19. After answering a business-information question, STOP.
+18. After answering a business-information question, STOP.
 
-20. Keep the final response concise and direct.
+19. Keep the final response concise and direct.
 """
 
     # =========================
-    # 11. START MESSAGES
+    # 10. START MESSAGES
     # =========================
 
     messages = [
@@ -752,13 +706,24 @@ STRICT GROUNDING RULES:
     ]
 
     # =========================
-    # 12. ADD CONVERSATION MEMORY
+    # 11. ADD LIMITED HISTORY
     # =========================
 
     if history:
+        recent_history = history[-MAX_LLM_HISTORY:]
 
-        for item in history:
+        print("\n------------------------------")
+        print("LLM HISTORY OPTIMIZATION")
+        print("------------------------------")
+        print(
+            f"TOTAL STORED HISTORY: {len(history)}"
+        )
+        print(
+            f"HISTORY SENT TO LLAMA: "
+            f"{len(recent_history)}"
+        )
 
+        for item in recent_history:
             messages.append(
                 {
                     "role": item.role,
@@ -766,8 +731,15 @@ STRICT GROUNDING RULES:
                 }
             )
 
+    else:
+        print("\n------------------------------")
+        print("LLM HISTORY OPTIMIZATION")
+        print("------------------------------")
+        print("TOTAL STORED HISTORY: 0")
+        print("HISTORY SENT TO LLAMA: 0")
+
     # =========================
-    # 13. REINFORCE CURRENT REQUEST
+    # 12. REINFORCE CURRENT REQUEST
     # =========================
 
     messages.append(
@@ -803,10 +775,6 @@ Requirement: {
     if qualification
     else None
 }
-
-RETRIEVED APPROVED KNOWLEDGE:
-
-{business_knowledge}
 
 FINAL RESPONSE RULES:
 
@@ -846,7 +814,7 @@ FINAL RESPONSE RULES:
     )
 
     # =========================
-    # 14. ADD CURRENT MESSAGE
+    # 13. ADD CURRENT MESSAGE
     # =========================
 
     messages.append(
@@ -856,18 +824,44 @@ FINAL RESPONSE RULES:
         }
     )
 
+    prompt_build_time = (
+        time.perf_counter()
+        - prompt_build_start
+    )
+
+    print(
+        f"PROMPT BUILD TIME: "
+        f"{prompt_build_time:.3f} seconds"
+    )
+
     # =========================
-    # 15. GENERATE AI RESPONSE
+    # 14. GENERATE AI RESPONSE
     # =========================
 
     try:
+        print("\n------------------------------")
+        print("OLLAMA GENERATION")
+        print("------------------------------")
+
+        ollama_start = time.perf_counter()
 
         response = ollama.chat(
             model="llama3.2:3b",
             messages=messages,
             options={
-                "temperature": 0
+                "temperature": 0,
+                "num_predict": 150
             }
+        )
+
+        ollama_time = (
+            time.perf_counter()
+            - ollama_start
+        )
+
+        print(
+            f"OLLAMA CHAT TIME: "
+            f"{ollama_time:.3f} seconds"
         )
 
         ai_message = response["message"]["content"]
@@ -877,6 +871,16 @@ FINAL RESPONSE RULES:
                 "Ollama returned an empty response"
             )
 
+        total_llm_time = (
+            time.perf_counter()
+            - total_llm_start
+        )
+
+        print(
+            f"TOTAL LLM TIME: "
+            f"{total_llm_time:.3f} seconds"
+        )
+
         return ai_message.strip()
 
     # =========================
@@ -884,7 +888,6 @@ FINAL RESPONSE RULES:
     # =========================
 
     except ConnectionError as error:
-
         print(
             f"Ollama connection error: {error}"
         )
@@ -898,7 +901,6 @@ FINAL RESPONSE RULES:
     # =========================
 
     except Exception as error:
-
         print(
             f"Ollama AI error: "
             f"{type(error).__name__}: {error}"

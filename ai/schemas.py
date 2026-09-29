@@ -35,9 +35,15 @@ class ChatResponse(BaseModel):
 
     qualification: QualificationData
 
-    lead_score: int = Field(
+    # Person-2 AI qualification score
+    ai_score: int = Field(
         ge=0,
         le=100
     )
 
-    lead_status: Literal["COLD", "WARM", "HOT"]
+    # Person-2 AI lead temperature
+    ai_temperature: Literal[
+        "cold",
+        "warm",
+        "hot"
+    ]

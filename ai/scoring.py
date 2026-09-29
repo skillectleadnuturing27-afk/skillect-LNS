@@ -25,11 +25,11 @@ def calculate_lead_score(qualification: dict) -> dict:
 
     # Lead status
     if score >= 80:
-        status = "HOT"
+        status = "hot"
     elif score >= 50:
-        status = "WARM"
+        status = "warm"
     else:
-        status = "COLD"
+        status = "cold"
 
     return {
         "score": score,

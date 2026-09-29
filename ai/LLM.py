@@ -1,4 +1,6 @@
+import re
 import time
+
 import ollama
 
 from ai.rag import retrieve_relevant_knowledge
@@ -35,10 +37,10 @@ Rules:
    question is actually needed.
 
 4. Try to understand the customer's:
-   - interest
-   - budget
-   - timeline
-   - requirement
+   interest
+   budget
+   timeline
+   requirement
 
 5. For business-specific questions, use ONLY the approved business
    knowledge provided in the BUSINESS KNOWLEDGE section.
@@ -84,16 +86,81 @@ Rules:
     to avoid misunderstanding.
 
 20. If requested business information is unavailable, do not invent it.
+
+21. Do not use Markdown bullet symbols such as *, -, or • in the
+    final response. When listing multiple items, write each item on
+    its own separate line without any bullet symbol.
+
+22. Never ask for a qualification field that already has a value in
+    CURRENT STRUCTURED QUALIFICATION.
+
+23. When a qualification statement needs a follow-up question, ask only
+    the next missing qualification field in this order:
+    interest, budget, timeline, requirement.
+
+Example:
+
+Amazon EC2
+Amazon S3
+IAM
+VPC
+EFS
+RDS
+Elastic Load Balancer
+CloudWatch
+
+Do NOT write:
+
+* Amazon EC2
+* Amazon S3
+* IAM
 """
+
+
+# =========================
+# RESPONSE FORMAT CLEANER
+# =========================
+
+def clean_response_format(text: str) -> str:
+
+    if not text:
+        return text
+
+    cleaned_lines = []
+
+    for line in text.splitlines():
+
+        cleaned_line = re.sub(
+            r"^\s*[\*\-•]\s+",
+            "",
+            line
+        )
+
+        cleaned_line = cleaned_line.replace(
+            "**",
+            ""
+        )
+
+        cleaned_lines.append(
+            cleaned_line.rstrip()
+        )
+
+    return "\n".join(
+        cleaned_lines
+    ).strip()
 
 
 # =========================
 # CERTIFICATION GUARD
 # =========================
 
-def get_certification_response(prompt: str):
+def get_certification_response(
+    prompt: str
+):
 
-    prompt_lower = prompt.lower().strip()
+    prompt_lower = (
+        prompt.lower().strip()
+    )
 
     certification_words = [
         "certification",
@@ -114,8 +181,16 @@ def get_certification_response(prompt: str):
     if not is_certification_message:
         return None
 
+
+    # =========================
     # AWS
-    if "aws" in prompt_lower or "amazon" in prompt_lower:
+    # =========================
+
+    if (
+        "aws" in prompt_lower
+        or "amazon" in prompt_lower
+    ):
+
         return (
             "Yes. Skillect provides training and examination "
             "preparation support for relevant official AWS "
@@ -125,11 +200,16 @@ def get_certification_response(prompt: str):
             "issue the official AWS certification."
         )
 
+
+    # =========================
     # AZURE
+    # =========================
+
     if (
         "azure" in prompt_lower
         or "microsoft" in prompt_lower
     ):
+
         return (
             "Yes. Skillect provides training and examination "
             "preparation support for relevant official Microsoft "
@@ -140,7 +220,11 @@ def get_certification_response(prompt: str):
             "certification."
         )
 
+
+    # =========================
     # GENERAL
+    # =========================
+
     return (
         "Skillect provides training and examination preparation "
         "support for relevant AWS and Microsoft Azure certification "
@@ -155,9 +239,13 @@ def get_certification_response(prompt: str):
 # CONTACT AVAILABILITY GUARD
 # =========================
 
-def get_contact_availability_response(prompt: str):
+def get_contact_availability_response(
+    prompt: str
+):
 
-    prompt_lower = prompt.lower().strip()
+    prompt_lower = (
+        prompt.lower().strip()
+    )
 
     contact_phrases = [
         "contact me",
@@ -181,23 +269,30 @@ def get_contact_availability_response(prompt: str):
     if not is_contact_availability:
         return None
 
+
     if "this week" in prompt_lower:
+
         return (
             "Sure. You're available to be contacted this week. "
             "Please provide your preferred day and time."
         )
 
+
     if "next week" in prompt_lower:
+
         return (
             "Sure. You're available to be contacted next week. "
             "Please provide your preferred day and time."
         )
 
+
     if "tomorrow" in prompt_lower:
+
         return (
             "Sure. You're available to be contacted tomorrow. "
             "Please provide your preferred time."
         )
+
 
     return (
         "Sure. I've noted your availability. "
@@ -209,9 +304,13 @@ def get_contact_availability_response(prompt: str):
 # EXPLICIT INTEREST GUARD
 # =========================
 
-def get_explicit_interest_response(prompt: str):
+def get_explicit_interest_response(
+    prompt: str
+):
 
-    prompt_lower = prompt.lower().strip()
+    prompt_lower = (
+        prompt.lower().strip()
+    )
 
     interest_phrases = [
         "i am interested in",
@@ -231,17 +330,25 @@ def get_explicit_interest_response(prompt: str):
     if not is_interest_statement:
         return None
 
-    if "aws" in prompt_lower or "amazon" in prompt_lower:
+
+    if (
+        "aws" in prompt_lower
+        or "amazon" in prompt_lower
+    ):
+
         return (
             "Great. You're interested in "
             "AWS Cloud Engineering."
         )
 
+
     if "azure" in prompt_lower:
+
         return (
             "Great. You're interested in "
             "Azure Cloud Engineering."
         )
+
 
     return None
 
@@ -255,7 +362,14 @@ def get_requirement_response(
     qualification=None
 ):
 
-    prompt_lower = prompt.lower().strip()
+    prompt_lower = (
+        prompt.lower().strip()
+    )
+
+
+    # =========================
+    # CAREER SWITCH
+    # =========================
 
     career_switch_phrases = [
         "career switch",
@@ -272,10 +386,16 @@ def get_requirement_response(
         phrase in prompt_lower
         for phrase in career_switch_phrases
     ):
+
         return (
             "Got it. You're looking to make "
             "a career switch."
         )
+
+
+    # =========================
+    # SKILL DEVELOPMENT
+    # =========================
 
     skill_phrases = [
         "improve my skills",
@@ -289,10 +409,16 @@ def get_requirement_response(
         phrase in prompt_lower
         for phrase in skill_phrases
     ):
+
         return (
             "Got it. You're looking to improve "
             "your skills."
         )
+
+
+    # =========================
+    # JOB
+    # =========================
 
     job_phrases = [
         "i need a job",
@@ -310,10 +436,189 @@ def get_requirement_response(
         phrase in prompt_lower
         for phrase in job_phrases
     ):
+
         return (
             "Got it. Your current requirement "
             "is a job."
         )
+
+
+    return None
+
+
+# =========================
+# QUALIFICATION STATEMENT GUARD
+# =========================
+
+def get_qualification_statement_response(
+    prompt: str,
+    qualification=None
+):
+
+    if not qualification:
+        return None
+
+
+    prompt_lower = (
+        prompt.lower().strip()
+    )
+
+
+    interest = qualification.get(
+        "interest"
+    )
+
+    budget = qualification.get(
+        "budget"
+    )
+
+    timeline = qualification.get(
+        "timeline"
+    )
+
+    requirement = qualification.get(
+        "requirement"
+    )
+
+
+    # =========================
+    # BUDGET STATEMENT
+    # =========================
+
+    budget_phrases = [
+        "my budget",
+        "i have a budget",
+        "i can spend",
+        "i can afford",
+        "my maximum budget",
+        "my max budget",
+    ]
+
+    is_budget_statement = any(
+        phrase in prompt_lower
+        for phrase in budget_phrases
+    )
+
+
+    if (
+        is_budget_statement
+        and budget is not None
+    ):
+
+        acknowledgement = (
+            f"Got it. Your budget is "
+            f"₹{budget:,}."
+        )
+
+
+        # Interest missing
+
+        if not interest:
+
+            return (
+                f"{acknowledgement} "
+                "What is your interest in "
+                "cloud engineering?"
+            )
+
+
+        # Timeline missing
+
+        if not timeline:
+
+            return (
+                f"{acknowledgement} "
+                "When are you planning to "
+                "start the course?"
+            )
+
+
+        # Requirement missing
+
+        if not requirement:
+
+            return (
+                f"{acknowledgement} "
+                "What is your main goal for "
+                "taking the course?"
+            )
+
+
+        return acknowledgement
+
+
+    # =========================
+    # TIMELINE STATEMENT
+    # =========================
+
+    timeline_phrases = [
+        "i want to start",
+        "i can start",
+        "i would like to start",
+        "i'm planning to start",
+        "i am planning to start",
+        "i plan to start",
+        "i need to start",
+        "start immediately",
+        "start now",
+        "this month",
+        "next month",
+        "as soon as possible",
+        "asap",
+    ]
+
+    is_timeline_statement = any(
+        phrase in prompt_lower
+        for phrase in timeline_phrases
+    )
+
+
+    if (
+        is_timeline_statement
+        and timeline
+    ):
+
+        acknowledgement = (
+            f"Got it. You're planning to start "
+            f"{timeline.lower()}."
+        )
+
+
+        # Interest missing
+
+        if not interest:
+
+            return (
+                f"{acknowledgement} "
+                "What is your interest in "
+                "cloud engineering?"
+            )
+
+
+        # Budget missing
+
+        if budget is None:
+
+            return (
+                f"{acknowledgement} "
+                "What is your budget for "
+                "the course?"
+            )
+
+
+        # Requirement missing
+
+        if not requirement:
+
+            return (
+                f"{acknowledgement} "
+                "What is your main goal for "
+                "taking the course?"
+            )
+
+
+        return acknowledgement
+
 
     return None
 
@@ -330,11 +635,15 @@ def get_qualification_memory_response(
     if not qualification:
         return None
 
-    prompt_lower = prompt.lower().strip()
 
-    # -------------------------
+    prompt_lower = (
+        prompt.lower().strip()
+    )
+
+
+    # =========================
     # CURRENT INTEREST
-    # -------------------------
+    # =========================
 
     interest_questions = [
         "what is my current interest",
@@ -350,9 +659,13 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in interest_questions
     ):
-        interest = qualification.get("interest")
+
+        interest = qualification.get(
+            "interest"
+        )
 
         if interest:
+
             return (
                 f"Your current interest is "
                 f"{interest} Cloud Engineering."
@@ -363,9 +676,10 @@ def get_qualification_memory_response(
             "course interest yet."
         )
 
-    # -------------------------
+
+    # =========================
     # CURRENT BUDGET
-    # -------------------------
+    # =========================
 
     budget_questions = [
         "what is my budget",
@@ -379,16 +693,26 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in budget_questions
     ):
-        budget = qualification.get("budget")
+
+        budget = qualification.get(
+            "budget"
+        )
 
         if budget is not None:
-            return f"Your current budget is ₹{budget:,}."
 
-        return "You haven't provided your budget yet."
+            return (
+                f"Your current budget is "
+                f"₹{budget:,}."
+            )
 
-    # -------------------------
+        return (
+            "You haven't provided your budget yet."
+        )
+
+
+    # =========================
     # CURRENT TIMELINE
-    # -------------------------
+    # =========================
 
     timeline_questions = [
         "what is my timeline",
@@ -403,19 +727,26 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in timeline_questions
     ):
-        timeline = qualification.get("timeline")
+
+        timeline = qualification.get(
+            "timeline"
+        )
 
         if timeline:
+
             return (
                 f"Your current timeline is "
                 f"{timeline}."
             )
 
-        return "You haven't provided your timeline yet."
+        return (
+            "You haven't provided your timeline yet."
+        )
 
-    # -------------------------
+
+    # =========================
     # CURRENT REQUIREMENT
-    # -------------------------
+    # =========================
 
     requirement_questions = [
         "what is my requirement",
@@ -431,9 +762,13 @@ def get_qualification_memory_response(
         phrase in prompt_lower
         for phrase in requirement_questions
     ):
-        requirement = qualification.get("requirement")
+
+        requirement = qualification.get(
+            "requirement"
+        )
 
         if requirement:
+
             return (
                 f"Your current requirement is "
                 f"{requirement}."
@@ -442,6 +777,7 @@ def get_qualification_memory_response(
         return (
             "You haven't provided your requirement yet."
         )
+
 
     return None
 
@@ -456,55 +792,100 @@ def ask_ai(
     qualification=None
 ) -> str:
 
-    total_llm_start = time.perf_counter()
+    total_llm_start = (
+        time.perf_counter()
+    )
+
 
     # =========================
     # 1. CERTIFICATION GUARD
     # =========================
 
-    certification_response = get_certification_response(
-        prompt
+    certification_response = (
+        get_certification_response(
+            prompt
+        )
     )
 
     if certification_response is not None:
-        return certification_response
+
+        return clean_response_format(
+            certification_response
+        )
+
 
     # =========================
     # 2. CONTACT GUARD
     # =========================
 
-    contact_response = get_contact_availability_response(
-        prompt
+    contact_response = (
+        get_contact_availability_response(
+            prompt
+        )
     )
 
     if contact_response is not None:
-        return contact_response
+
+        return clean_response_format(
+            contact_response
+        )
+
 
     # =========================
     # 3. EXPLICIT INTEREST GUARD
     # =========================
 
-    interest_response = get_explicit_interest_response(
-        prompt
+    interest_response = (
+        get_explicit_interest_response(
+            prompt
+        )
     )
 
     if interest_response is not None:
-        return interest_response
+
+        return clean_response_format(
+            interest_response
+        )
+
 
     # =========================
     # 4. REQUIREMENT GUARD
     # =========================
 
-    requirement_response = get_requirement_response(
-        prompt,
-        qualification
+    requirement_response = (
+        get_requirement_response(
+            prompt,
+            qualification
+        )
     )
 
     if requirement_response is not None:
-        return requirement_response
+
+        return clean_response_format(
+            requirement_response
+        )
+
 
     # =========================
-    # 5. QUALIFICATION MEMORY
+    # 5. QUALIFICATION STATEMENT
+    # =========================
+
+    qualification_statement_response = (
+        get_qualification_statement_response(
+            prompt,
+            qualification
+        )
+    )
+
+    if qualification_statement_response is not None:
+
+        return clean_response_format(
+            qualification_statement_response
+        )
+
+
+    # =========================
+    # 6. QUALIFICATION MEMORY
     # =========================
 
     qualification_response = (
@@ -515,81 +896,121 @@ def ask_ai(
     )
 
     if qualification_response is not None:
-        return qualification_response
+
+        return clean_response_format(
+            qualification_response
+        )
+
 
     # =========================
-    # 6. BUILD RAG QUERY
+    # 7. BUILD RAG QUERY
     # =========================
 
     retrieval_parts = []
 
-    prompt_lower = prompt.lower()
+    prompt_lower = (
+        prompt.lower()
+    )
+
 
     current_mentions_aws = (
         "aws" in prompt_lower
         or "amazon" in prompt_lower
     )
 
+
     current_mentions_azure = (
         "azure" in prompt_lower
     )
+
 
     current_has_explicit_provider = (
         current_mentions_aws
         or current_mentions_azure
     )
 
+
     if current_has_explicit_provider:
+
         retrieval_query = prompt
 
+
     else:
+
         if history:
+
             recent_user_messages = [
                 item.message
                 for item in history
-                if item.role == "user"
+                if item.role in (
+                    "lead",
+                    "user"
+                )
             ][-3:]
+
 
             retrieval_parts.extend(
                 recent_user_messages
             )
 
-        retrieval_parts.append(prompt)
+
+        retrieval_parts.append(
+            prompt
+        )
+
 
         retrieval_query = " ".join(
             retrieval_parts
         )
 
+
     # =========================
-    # 7. RETRIEVE KNOWLEDGE
+    # 8. RETRIEVE KNOWLEDGE
     # =========================
 
-    rag_start = time.perf_counter()
-
-    business_knowledge = retrieve_relevant_knowledge(
-        retrieval_query
+    rag_start = (
+        time.perf_counter()
     )
 
-    rag_time = time.perf_counter() - rag_start
+
+    business_knowledge = (
+        retrieve_relevant_knowledge(
+            retrieval_query
+        )
+    )
+
+
+    rag_time = (
+        time.perf_counter()
+        - rag_start
+    )
+
 
     print(
-        f"RAG TIME: {rag_time:.3f} seconds"
+        f"RAG TIME: "
+        f"{rag_time:.3f} seconds"
     )
+
 
     knowledge_found = bool(
         business_knowledge.strip()
     )
 
+
     if not knowledge_found:
+
         business_knowledge = (
-            "NO RELEVANT APPROVED BUSINESS INFORMATION FOUND."
+            "NO RELEVANT APPROVED "
+            "BUSINESS INFORMATION FOUND."
         )
 
+
     # =========================
-    # 8. BUILD QUALIFICATION CONTEXT
+    # 9. BUILD QUALIFICATION CONTEXT
     # =========================
 
     if qualification:
+
         qualification_context = f"""
 Interest:
 {qualification.get("interest")}
@@ -604,16 +1025,22 @@ Requirement:
 {qualification.get("requirement")}
 """
 
+
     else:
+
         qualification_context = """
 No structured qualification data is currently available.
 """
 
+
     # =========================
-    # 9. BUILD SYSTEM CONTEXT
+    # 10. BUILD SYSTEM CONTEXT
     # =========================
 
-    prompt_build_start = time.perf_counter()
+    prompt_build_start = (
+        time.perf_counter()
+    )
+
 
     system_content = f"""
 {SYSTEM_PROMPT}
@@ -641,10 +1068,10 @@ STRICT GROUNDING RULES:
 
 2. CURRENT STRUCTURED QUALIFICATION is the authoritative
    source for the customer's:
-   - interest
-   - budget
-   - timeline
-   - requirement
+   interest
+   budget
+   timeline
+   requirement
 
 3. If history conflicts with structured qualification,
    use structured qualification.
@@ -692,10 +1119,33 @@ STRICT GROUNDING RULES:
 18. After answering a business-information question, STOP.
 
 19. Keep the final response concise and direct.
+
+20. Do not use Markdown bullet symbols such as *, -, or •
+    in the final response.
+
+21. If multiple services, topics, courses, or other items
+    must be listed, put each item on a separate line with
+    no symbol before it.
+
+22. Never ask for interest, budget, timeline, or requirement
+    when that field already has a value in CURRENT STRUCTURED
+    QUALIFICATION.
+
+Correct list format:
+
+Amazon EC2
+Amazon S3
+IAM
+VPC
+EFS
+RDS
+Elastic Load Balancer
+CloudWatch
 """
 
+
     # =========================
-    # 10. START MESSAGES
+    # 11. START MESSAGES
     # =========================
 
     messages = [
@@ -705,42 +1155,149 @@ STRICT GROUNDING RULES:
         }
     ]
 
+
     # =========================
-    # 11. ADD LIMITED HISTORY
+    # 12. ADD LIMITED HISTORY
     # =========================
 
     if history:
-        recent_history = history[-MAX_LLM_HISTORY:]
 
-        print("\n------------------------------")
-        print("LLM HISTORY OPTIMIZATION")
-        print("------------------------------")
-        print(
-            f"TOTAL STORED HISTORY: {len(history)}"
+        recent_history = (
+            history[
+                -MAX_LLM_HISTORY:
+            ]
         )
+
+
+        print(
+            "\n------------------------------"
+        )
+
+        print(
+            "LLM HISTORY OPTIMIZATION"
+        )
+
+        print(
+            "------------------------------"
+        )
+
+
+        print(
+            f"TOTAL STORED HISTORY: "
+            f"{len(history)}"
+        )
+
+
         print(
             f"HISTORY SENT TO LLAMA: "
             f"{len(recent_history)}"
         )
 
+
         for item in recent_history:
+
+
+            # =========================
+            # DATABASE ROLE → OLLAMA ROLE
+            # =========================
+
+            if item.role in (
+                "lead",
+                "user"
+            ):
+
+                ollama_role = (
+                    "user"
+                )
+
+
+            elif item.role in (
+                "ai",
+                "assistant"
+            ):
+
+                ollama_role = (
+                    "assistant"
+                )
+
+
+            else:
+
+                continue
+
+
             messages.append(
                 {
-                    "role": item.role,
+                    "role": ollama_role,
                     "content": item.message
                 }
             )
 
+
     else:
-        print("\n------------------------------")
-        print("LLM HISTORY OPTIMIZATION")
-        print("------------------------------")
-        print("TOTAL STORED HISTORY: 0")
-        print("HISTORY SENT TO LLAMA: 0")
+
+        print(
+            "\n------------------------------"
+        )
+
+        print(
+            "LLM HISTORY OPTIMIZATION"
+        )
+
+        print(
+            "------------------------------"
+        )
+
+
+        print(
+            "TOTAL STORED HISTORY: 0"
+        )
+
+
+        print(
+            "HISTORY SENT TO LLAMA: 0"
+        )
+
 
     # =========================
-    # 12. REINFORCE CURRENT REQUEST
+    # 13. REINFORCE CURRENT REQUEST
     # =========================
+
+    current_interest = (
+        qualification.get(
+            "interest"
+        )
+        if qualification
+        else None
+    )
+
+
+    current_budget = (
+        qualification.get(
+            "budget"
+        )
+        if qualification
+        else None
+    )
+
+
+    current_timeline = (
+        qualification.get(
+            "timeline"
+        )
+        if qualification
+        else None
+    )
+
+
+    current_requirement = (
+        qualification.get(
+            "requirement"
+        )
+        if qualification
+        else None
+    )
+
 
     messages.append(
         {
@@ -752,29 +1309,13 @@ CURRENT CUSTOMER MESSAGE:
 
 CURRENT STRUCTURED QUALIFICATION:
 
-Interest: {
-    qualification.get("interest")
-    if qualification
-    else None
-}
+Interest: {current_interest}
 
-Budget: {
-    qualification.get("budget")
-    if qualification
-    else None
-}
+Budget: {current_budget}
 
-Timeline: {
-    qualification.get("timeline")
-    if qualification
-    else None
-}
+Timeline: {current_timeline}
 
-Requirement: {
-    qualification.get("requirement")
-    if qualification
-    else None
-}
+Requirement: {current_requirement}
 
 FINAL RESPONSE RULES:
 
@@ -809,12 +1350,33 @@ FINAL RESPONSE RULES:
 11. Do not add unnecessary follow-up questions.
 
 12. Keep the response concise.
+
+13. Do not use *, -, •, or any Markdown bullet symbol
+    in the final response.
+
+14. When listing multiple items, put each item on its
+    own separate line without a bullet symbol.
+
+15. Never ask for a qualification field that already has
+    a value in CURRENT STRUCTURED QUALIFICATION.
+
+Example:
+
+Amazon EC2
+Amazon S3
+IAM
+VPC
+EFS
+RDS
+Elastic Load Balancer
+CloudWatch
 """
         }
     )
 
+
     # =========================
-    # 13. ADD CURRENT MESSAGE
+    # 14. ADD CURRENT MESSAGE
     # =========================
 
     messages.append(
@@ -824,26 +1386,44 @@ FINAL RESPONSE RULES:
         }
     )
 
+
     prompt_build_time = (
         time.perf_counter()
         - prompt_build_start
     )
+
 
     print(
         f"PROMPT BUILD TIME: "
         f"{prompt_build_time:.3f} seconds"
     )
 
+
     # =========================
-    # 14. GENERATE AI RESPONSE
+    # 15. GENERATE AI RESPONSE
     # =========================
 
     try:
-        print("\n------------------------------")
-        print("OLLAMA GENERATION")
-        print("------------------------------")
 
-        ollama_start = time.perf_counter()
+        print(
+            "\n------------------------------"
+        )
+
+
+        print(
+            "OLLAMA GENERATION"
+        )
+
+
+        print(
+            "------------------------------"
+        )
+
+
+        ollama_start = (
+            time.perf_counter()
+        )
+
 
         response = ollama.chat(
             model="llama3.2:3b",
@@ -854,57 +1434,93 @@ FINAL RESPONSE RULES:
             }
         )
 
+
         ollama_time = (
             time.perf_counter()
             - ollama_start
         )
+
 
         print(
             f"OLLAMA CHAT TIME: "
             f"{ollama_time:.3f} seconds"
         )
 
-        ai_message = response["message"]["content"]
 
-        if not ai_message or not ai_message.strip():
+        ai_message = (
+            response[
+                "message"
+            ][
+                "content"
+            ]
+        )
+
+
+        if (
+            not ai_message
+            or not ai_message.strip()
+        ):
+
             raise RuntimeError(
                 "Ollama returned an empty response"
             )
+
+
+        # =========================
+        # CLEAN RESPONSE FORMAT
+        # =========================
+
+        ai_message = (
+            clean_response_format(
+                ai_message
+            )
+        )
+
 
         total_llm_time = (
             time.perf_counter()
             - total_llm_start
         )
 
+
         print(
             f"TOTAL LLM TIME: "
             f"{total_llm_time:.3f} seconds"
         )
 
-        return ai_message.strip()
+
+        return ai_message
+
 
     # =========================
     # OLLAMA CONNECTION FAILURE
     # =========================
 
     except ConnectionError as error:
+
         print(
-            f"Ollama connection error: {error}"
+            f"Ollama connection error: "
+            f"{error}"
         )
+
 
         raise RuntimeError(
             "AI service is temporarily unavailable"
         ) from error
+
 
     # =========================
     # OTHER OLLAMA FAILURE
     # =========================
 
     except Exception as error:
+
         print(
             f"Ollama AI error: "
-            f"{type(error).__name__}: {error}"
+            f"{type(error).__name__}: "
+            f"{error}"
         )
+
 
         raise RuntimeError(
             "AI service is temporarily unavailable"

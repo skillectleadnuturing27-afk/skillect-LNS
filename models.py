@@ -64,6 +64,10 @@ class Lead(Base):
         nullable=True,
     )
 
+    # =====================================================
+    # PERSON-1 BACKEND / BUSINESS SCORING
+    # =====================================================
+
     lead_score = Column(
         Integer,
         nullable=False,
@@ -75,6 +79,26 @@ class Lead(Base):
         nullable=False,
         default="cold",
     )
+
+    # =====================================================
+    # PERSON-2 AI QUALIFICATION SCORING
+    # =====================================================
+
+    ai_score = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    ai_temperature = Column(
+        String(20),
+        nullable=False,
+        default="COLD",
+    )
+
+    # =====================================================
+    # TIMESTAMPS
+    # =====================================================
 
     created_at = Column(
         DateTime(timezone=True),
@@ -88,6 +112,10 @@ class Lead(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    # =====================================================
+    # RELATIONSHIPS
+    # =====================================================
 
     activities = relationship(
         "LeadActivity",

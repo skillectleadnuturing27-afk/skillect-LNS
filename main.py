@@ -17,6 +17,7 @@ from datetime import (
     timedelta,
 )
 
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 import models
@@ -78,10 +79,41 @@ def get_db():
 
 
 # =========================================================
+# HELPER - INDIA TODAY RANGE
+# =========================================================
+
+def get_india_today_utc_range():
+
+    india_tz = ZoneInfo("Asia/Kolkata")
+
+    now_india = datetime.now(india_tz)
+
+    start_india = now_india.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+
+    end_india = start_india + timedelta(days=1)
+
+    start_utc = start_india.astimezone(timezone.utc)
+    end_utc = end_india.astimezone(timezone.utc)
+
+    return start_utc, end_utc
+
+
+# =========================================================
 # HELPER - LEAD SCORE
 # =========================================================
 
 def calculate_lead_score(lead):
+
+    status = str(lead.status).lower()
+
+    # LOST lead must always have score 0
+    if status == "lost":
+        return 0
 
     score = 0
 
@@ -94,7 +126,7 @@ def calculate_lead_score(lead):
     }
 
     score += status_scores.get(
-        str(lead.status).lower(),
+        status,
         0,
     )
 
@@ -189,7 +221,10 @@ def root():
 # DASHBOARD SUMMARY
 # =========================================================
 
-@app.get("/dashboard/summary")
+@app.get(
+    "/dashboard/summary",
+    response_model=schemas.DashboardSummaryResponse,
+)
 def dashboard_summary(
     db: Session = Depends(get_db),
 ):
@@ -223,19 +258,8 @@ def dashboard_summary(
         .count()
     )
 
-    now = datetime.now(timezone.utc)
-
-    start_today = now.replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
-
-    end_today = (
-        start_today
-        + timedelta(days=1)
-    )
+    # India/IST today converted to UTC for database comparison
+    start_today, end_today = get_india_today_utc_range()
 
     todays_followups = (
         db.query(models.Lead)
@@ -260,7 +284,10 @@ def dashboard_summary(
 # DASHBOARD RECENT
 # =========================================================
 
-@app.get("/dashboard/recent")
+@app.get(
+    "/dashboard/recent",
+    response_model=schemas.DashboardRecentResponse,
+)
 def dashboard_recent(
     limit: int = Query(
         default=10,
@@ -298,7 +325,10 @@ def dashboard_recent(
 # LEAD STATISTICS
 # =========================================================
 
-@app.get("/leads/stats")
+@app.get(
+    "/leads/stats",
+    response_model=schemas.LeadStatsResponse,
+)
 def lead_statistics(
     db: Session = Depends(get_db),
 ):
@@ -393,7 +423,10 @@ def lead_statistics(
 # HOT LEADS
 # =========================================================
 
-@app.get("/leads/hot")
+@app.get(
+    "/leads/hot",
+    response_model=schemas.HotLeadsResponse,
+)
 def get_hot_leads(
     db: Session = Depends(get_db),
 ):
@@ -419,7 +452,10 @@ def get_hot_leads(
 # ALL FOLLOW-UPS
 # =========================================================
 
-@app.get("/leads/follow-ups")
+@app.get(
+    "/leads/follow-ups",
+    response_model=schemas.FollowUpLeadsResponse,
+)
 def get_followups(
     db: Session = Depends(get_db),
 ):
@@ -445,7 +481,10 @@ def get_followups(
 # OVERDUE FOLLOW-UPS
 # =========================================================
 
-@app.get("/leads/follow-ups/overdue")
+@app.get(
+    "/leads/follow-ups/overdue",
+    response_model=schemas.FollowUpLeadsResponse,
+)
 def overdue_followups(
     db: Session = Depends(get_db),
 ):
@@ -474,24 +513,16 @@ def overdue_followups(
 # TODAY FOLLOW-UPS
 # =========================================================
 
-@app.get("/leads/follow-ups/today")
+@app.get(
+    "/leads/follow-ups/today",
+    response_model=schemas.FollowUpLeadsResponse,
+)
 def today_followups(
     db: Session = Depends(get_db),
 ):
 
-    now = datetime.now(timezone.utc)
-
-    start_today = now.replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
-
-    end_today = (
-        start_today
-        + timedelta(days=1)
-    )
+    # India/IST today converted to UTC
+    start_today, end_today = get_india_today_utc_range()
 
     leads = (
         db.query(models.Lead)
@@ -516,7 +547,23 @@ def today_followups(
 # CREATE LEAD
 # =========================================================
 
-@app.post("/leads")
+@app.post(
+    "/leads",
+    response_model=schemas.LeadResponse,
+    responses={
+        400: {
+            "description": "Duplicate email",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail":
+                        "A lead with this email already exists"
+                    }
+                }
+            },
+        }
+    },
+)
 def create_lead(
     lead_data: schemas.LeadCreate,
     db: Session = Depends(get_db),
@@ -532,7 +579,6 @@ def create_lead(
     )
 
     if existing_lead:
-
         raise HTTPException(
             status_code=400,
             detail="A lead with this email already exists",
@@ -586,7 +632,10 @@ def create_lead(
 # ADVANCED FILTER + SORT + PAGINATION
 # =========================================================
 
-@app.get("/leads")
+@app.get(
+    "/leads",
+    response_model=schemas.LeadListResponse,
+)
 def get_leads(
 
     search: Optional[str] = Query(
@@ -641,29 +690,20 @@ def get_leads(
 
     query = db.query(models.Lead)
 
-
-    # =====================================================
+    # ============================================
     # SEARCH
-    # =====================================================
+    # ============================================
 
     if search:
 
-        search_value = f"%{search}%"
+        search_value = f"%{search.strip()}%"
 
         query = query.filter(
             or_(
-                models.Lead.name.ilike(
-                    search_value
-                ),
-                models.Lead.email.ilike(
-                    search_value
-                ),
-                models.Lead.phone.ilike(
-                    search_value
-                ),
+                models.Lead.email.ilike(search_value),
+                models.Lead.phone.ilike(search_value),
             )
         )
-
 
     # =====================================================
     # STATUS FILTER
@@ -675,7 +715,6 @@ def get_leads(
             models.Lead.status == status
         )
 
-
     # =====================================================
     # SOURCE FILTER
     # =====================================================
@@ -685,7 +724,6 @@ def get_leads(
         query = query.filter(
             models.Lead.source == source
         )
-
 
     # =====================================================
     # MIN SCORE FILTER
@@ -698,7 +736,6 @@ def get_leads(
             >= min_score
         )
 
-
     # =====================================================
     # MAX SCORE FILTER
     # =====================================================
@@ -710,7 +747,6 @@ def get_leads(
             <= max_score
         )
 
-
     # =====================================================
     # TEMPERATURE FILTER
     # =====================================================
@@ -721,7 +757,6 @@ def get_leads(
             models.Lead.lead_temperature
             == temperature
         )
-
 
     # =====================================================
     # VALID SORT FIELDS
@@ -757,12 +792,10 @@ def get_leads(
             models.Lead.follow_up_at,
     }
 
-
     sort_column = sort_fields.get(
         sort_by,
         models.Lead.created_at,
     )
-
 
     # =====================================================
     # SORT ORDER
@@ -780,13 +813,11 @@ def get_leads(
             sort_column.desc()
         )
 
-
     # =====================================================
     # TOTAL COUNT BEFORE PAGINATION
     # =====================================================
 
     total_count = query.count()
-
 
     # =====================================================
     # PAGINATION
@@ -798,7 +829,6 @@ def get_leads(
         .limit(limit)
         .all()
     )
-
 
     return {
 
@@ -814,11 +844,13 @@ def get_leads(
     }
 
 
+# =====================================================
 # GET ONE LEAD
 # =====================================================
 
 @app.get(
     "/leads/{lead_id}",
+    response_model=schemas.LeadResponse,
     responses={
         404: {
             "description": "Lead not found",
@@ -836,6 +868,7 @@ def get_lead(
     lead_id: int,
     db: Session = Depends(get_db),
 ):
+
     lead = (
         db.query(models.Lead)
         .filter(models.Lead.id == lead_id)
@@ -855,7 +888,10 @@ def get_lead(
 # UPDATE LEAD
 # =========================================================
 
-@app.put("/leads/{lead_id}")
+@app.put(
+    "/leads/{lead_id}",
+    response_model=schemas.LeadResponse,
+)
 def update_lead(
     lead_id: int,
     lead_data: schemas.LeadUpdate,
@@ -988,7 +1024,10 @@ def update_lead(
 # DELETE LEAD
 # =========================================================
 
-@app.delete("/leads/{lead_id}")
+@app.delete(
+    "/leads/{lead_id}",
+    response_model=schemas.DeleteLeadResponse,
+)
 def delete_lead(
     lead_id: int,
     db: Session = Depends(get_db),
@@ -1025,34 +1064,41 @@ def delete_lead(
 # UPDATE FOLLOW-UP
 # =========================================================
 
-@app.patch("/leads/{lead_id}/follow-up")
+@app.patch(
+    "/leads/{lead_id}/follow-up",
+    response_model=schemas.LeadResponse,
+)
 def update_followup(
     lead_id: int,
     followup: schemas.FollowUpUpdate,
     db: Session = Depends(get_db),
 ):
 
+    # Find the lead
     lead = (
         db.query(models.Lead)
-        .filter(
-            models.Lead.id == lead_id
-        )
+        .filter(models.Lead.id == lead_id)
         .first()
     )
 
+    # Lead does not exist
     if not lead:
-
         raise HTTPException(
             status_code=404,
             detail="Lead not found",
         )
 
-    lead.follow_up_at = (
-        followup.follow_up_at
-    )
+    # Update follow-up date/time
+    lead.follow_up_at = followup.follow_up_at
 
+    # Update notes if provided
+    if followup.notes is not None:
+        lead.notes = followup.notes
+
+    # Recalculate lead score
     update_lead_score(lead)
 
+    # Save activity history
     create_activity(
         db=db,
         lead_id=lead.id,
@@ -1063,47 +1109,55 @@ def update_followup(
         ),
     )
 
+    # Save changes
     db.commit()
-
     db.refresh(lead)
 
     return lead
 
 
 # =========================================================
-# UPDATE STATUS
+# UPDATE LEAD STATUS
 # =========================================================
 
-@app.patch("/leads/{lead_id}/status")
+@app.patch(
+    "/leads/{lead_id}/status",
+    response_model=schemas.LeadResponse,
+)
 def update_status(
     lead_id: int,
     status_data: schemas.LeadStatusUpdate,
     db: Session = Depends(get_db),
 ):
 
+    # Find lead
     lead = (
         db.query(models.Lead)
-        .filter(
-            models.Lead.id == lead_id
-        )
+        .filter(models.Lead.id == lead_id)
         .first()
     )
 
+    # Lead not found
     if not lead:
-
         raise HTTPException(
             status_code=404,
             detail="Lead not found",
         )
 
+    # Save old status for activity history
     old_status = lead.status
 
-    lead.status = (
-        status_data.status
-    )
+    # Update status
+    lead.status = status_data.status
 
+    # Converted or lost leads don't need follow-up
+    if lead.status in ("converted", "lost"):
+        lead.follow_up_at = None
+
+    # Recalculate score and temperature
     update_lead_score(lead)
 
+    # Save activity
     create_activity(
         db=db,
         lead_id=lead.id,
@@ -1115,8 +1169,10 @@ def update_status(
         ),
     )
 
+    # Save changes
     db.commit()
 
+    # Reload updated lead
     db.refresh(lead)
 
     return lead
@@ -1168,45 +1224,13 @@ def get_lead_activities(
 
 
 # =========================================================
-# CREATE CONVERSATION
-# =========================================================
-
-    lead = (
-        db.query(models.Lead)
-        .filter(
-            models.Lead.id == lead_id
-        )
-        .first()
-    )
-
-    if not lead:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Lead not found",
-        )
-
-    new_message = (
-        models.Conversation(
-            lead_id=lead_id,
-            role=conversation.role,
-            message=conversation.message,
-        )
-    )
-
-    db.add(new_message)
-
-    db.commit()
-
-    db.refresh(new_message)
-
-    return new_message
-
-# =========================================================
 # FULL LEAD DETAILS
 # =========================================================
 
-@app.get("/leads/{lead_id}/full-details")
+@app.get(
+    "/leads/{lead_id}/full-details",
+    response_model=schemas.LeadFullDetailsResponse,
+)
 def get_full_lead_details(
     lead_id: int,
     db: Session = Depends(get_db),
@@ -1257,9 +1281,10 @@ def get_full_lead_details(
         "conversations": conversations,
     }
 
-# =========================
+
+# =========================================================
 # CREATE CONVERSATION
-# =========================
+# =========================================================
 
 @app.post(
     "/leads/{lead_id}/conversations",
@@ -1270,6 +1295,7 @@ def create_conversation(
     conversation: schemas.ConversationCreate,
     db: Session = Depends(get_db)
 ):
+
     # Check whether the lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1294,9 +1320,10 @@ def create_conversation(
 
     return new_conversation
 
-# =========================
+
+# =========================================================
 # GET LEAD CONVERSATIONS
-# =========================
+# =========================================================
 
 @app.get(
     "/leads/{lead_id}/conversations",
@@ -1308,6 +1335,7 @@ def get_lead_conversations(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db)
 ):
+
     # Check whether lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1321,26 +1349,35 @@ def get_lead_conversations(
 
     # Get conversations with pagination
     conversations = (
-    db.query(models.Conversation)
-    .filter(models.Conversation.lead_id == lead_id)
-    .order_by(models.Conversation.created_at.asc())
-    .offset(offset)
-    .limit(limit)
-    .all()
-)
+        db.query(models.Conversation)
+        .filter(
+            models.Conversation.lead_id == lead_id
+        )
+        .order_by(
+            models.Conversation.created_at.asc()
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
     return conversations
 
-# =========================
-# DELETE CONVERSATION
-# =========================
 
-@app.delete("/leads/{lead_id}/conversations/{conversation_id}")
+# =========================================================
+# DELETE CONVERSATION
+# =========================================================
+
+@app.delete(
+    "/leads/{lead_id}/conversations/{conversation_id}",
+    response_model=schemas.DeleteConversationResponse,
+)
 def delete_conversation(
     lead_id: int,
     conversation_id: int,
     db: Session = Depends(get_db)
 ):
+
     # Check whether the lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1353,10 +1390,14 @@ def delete_conversation(
         )
 
     # Find the conversation belonging to this lead
-    conversation = db.query(models.Conversation).filter(
-        models.Conversation.id == conversation_id,
-        models.Conversation.lead_id == lead_id
-    ).first()
+    conversation = (
+        db.query(models.Conversation)
+        .filter(
+            models.Conversation.id == conversation_id,
+            models.Conversation.lead_id == lead_id
+        )
+        .first()
+    )
 
     if not conversation:
         raise HTTPException(
@@ -1373,9 +1414,10 @@ def delete_conversation(
         "conversation_id": conversation_id
     }
 
-# =========================
+
+# =========================================================
 # UPDATE CONVERSATION
-# =========================
+# =========================================================
 
 @app.patch(
     "/leads/{lead_id}/conversations/{conversation_id}",
@@ -1387,6 +1429,7 @@ def update_conversation(
     conversation_update: schemas.ConversationUpdate,
     db: Session = Depends(get_db)
 ):
+
     # Check whether the lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1399,10 +1442,14 @@ def update_conversation(
         )
 
     # Find conversation belonging to this lead
-    conversation = db.query(models.Conversation).filter(
-        models.Conversation.id == conversation_id,
-        models.Conversation.lead_id == lead_id
-    ).first()
+    conversation = (
+        db.query(models.Conversation)
+        .filter(
+            models.Conversation.id == conversation_id,
+            models.Conversation.lead_id == lead_id
+        )
+        .first()
+    )
 
     if not conversation:
         raise HTTPException(
@@ -1422,15 +1469,20 @@ def update_conversation(
 
     return conversation
 
-# =========================
-# CONVERSATION STATISTICS
-# =========================
 
-@app.get("/leads/{lead_id}/conversations/stats")
+# =========================================================
+# CONVERSATION STATISTICS
+# =========================================================
+
+@app.get(
+    "/leads/{lead_id}/conversations",
+    response_model=list[schemas.ConversationResponse],
+)
 def get_conversation_stats(
     lead_id: int,
     db: Session = Depends(get_db)
 ):
+
     # Check if lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1443,9 +1495,13 @@ def get_conversation_stats(
         )
 
     # Get all conversations for this lead
-    conversations = db.query(models.Conversation).filter(
-        models.Conversation.lead_id == lead_id
-    ).all()
+    conversations = (
+        db.query(models.Conversation)
+        .filter(
+            models.Conversation.lead_id == lead_id
+        )
+        .all()
+    )
 
     total_conversations = len(conversations)
 
@@ -1466,15 +1522,20 @@ def get_conversation_stats(
         "ai_messages": ai_messages
     }
 
-# =========================
-# GET LATEST CONVERSATION
-# =========================
 
-@app.get("/leads/{lead_id}/conversations/latest")
+# =========================================================
+# GET LATEST CONVERSATION
+# =========================================================
+
+@app.get(
+    "/leads/{lead_id}/conversations/latest",
+    response_model=schemas.ConversationResponse,
+)
 def get_latest_conversation(
     lead_id: int,
     db: Session = Depends(get_db)
 ):
+
     # Check if lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1489,8 +1550,12 @@ def get_latest_conversation(
     # Get latest conversation
     conversation = (
         db.query(models.Conversation)
-        .filter(models.Conversation.lead_id == lead_id)
-        .order_by(models.Conversation.created_at.desc())
+        .filter(
+            models.Conversation.lead_id == lead_id
+        )
+        .order_by(
+            models.Conversation.created_at.desc()
+        )
         .first()
     )
 
@@ -1502,16 +1567,21 @@ def get_latest_conversation(
 
     return conversation
 
-# =========================
-# SEARCH CONVERSATIONS
-# =========================
 
-@app.get("/leads/{lead_id}/conversations/search")
+# =========================================================
+# SEARCH CONVERSATIONS
+# =========================================================
+
+@app.get(
+    "/leads/{lead_id}/conversations/search",
+    response_model=list[schemas.ConversationResponse],
+)
 def search_conversations(
     lead_id: int,
     query: str = Query(..., min_length=1),
     db: Session = Depends(get_db)
 ):
+
     # Check if lead exists
     lead = db.query(models.Lead).filter(
         models.Lead.id == lead_id
@@ -1528,9 +1598,13 @@ def search_conversations(
         db.query(models.Conversation)
         .filter(
             models.Conversation.lead_id == lead_id,
-            models.Conversation.message.ilike(f"%{query}%")
+            models.Conversation.message.ilike(
+                f"%{query}%"
+            )
         )
-        .order_by(models.Conversation.created_at.desc())
+        .order_by(
+            models.Conversation.created_at.desc()
+        )
         .all()
     )
 
@@ -1540,6 +1614,4 @@ def search_conversations(
         "count": len(conversations),
         "conversations": conversations
     }
-
-
 

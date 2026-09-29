@@ -146,7 +146,10 @@ class LeadActivity(Base):
 
     lead_id = Column(
         Integer,
-        ForeignKey("leads.id", ondelete="CASCADE"),
+        ForeignKey(
+            "leads.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -189,7 +192,10 @@ class Conversation(Base):
 
     lead_id = Column(
         Integer,
-        ForeignKey("leads.id", ondelete="CASCADE"),
+        ForeignKey(
+            "leads.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )

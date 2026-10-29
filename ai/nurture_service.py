@@ -1,18 +1,29 @@
 
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Any, Optional, List, Mapping
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-from models import Lead, Conversation, NurtureMessage
+from models import (
+    Lead,
+    Conversation,
+    NurtureMessage,
+    NurtureContentIdentity,
+    NurtureImageMetadata,
+)
 
 from ai.nurturing import is_not_interested
-from ai.engagement import decide_engagement
-from ai.content_library import (
-    get_content,
-    personalize_content,
+from ai.nurturing import is_not_interested
+from ai.engagement import decide_engagement, get_content_topic
+from ai.content_library import get_content, personalize_content
+from ai.content_dedup import (
+    extract_urls,
+    get_content_identities,
 )
+from ai.article_feed import load_approved_article_candidates
+from ai.batch_library import load_approved_batch_candidates
 
 
 # =========================================================
@@ -20,6 +31,7 @@ from ai.content_library import (
 # =========================================================
 
 INDIA_TIMEZONE = ZoneInfo("Asia/Kolkata")
+CONTENT_IDENTITY_INDEX = "uq_nurture_content_identity_lead_identity"
 
 
 # =========================================================
@@ -151,7 +163,99 @@ def get_previous_content_types(
 
 
 # =========================================================
+<<<<<<< HEAD
+# GET PREVIOUS CONTENT IDENTITIES
+# =========================================================
+
+def get_previous_content_identities(
+    db: Session,
+    lead_id: int,
+) -> set[str]:
+    records = (
+        db.query(NurtureMessage)
+        .filter(
+            NurtureMessage.lead_id == lead_id,
+            NurtureMessage.status.in_(
+                ["generated", "sent"]
+            ),
+        )
+        .all()
+    )
+
+    if not records:
+        return set()
+
+    record_ids = [record.id for record in records]
+    identities = {
+        row.identity
+        for row in (
+            db.query(NurtureContentIdentity.identity)
+            .filter(
+                NurtureContentIdentity.lead_id == lead_id,
+                NurtureContentIdentity.nurture_id.in_(record_ids),
+            )
+            .all()
+        )
+    }
+
+    for record in records:
+        if record.content_type == "image" and record.message.startswith(
+            ("http://", "https://")
+        ):
+            identities.update(
+                get_content_identities(
+                    "image",
+                    {"image_url": record.message},
+                )
+            )
+            continue
+
+        if record.content_type in {
+            "industry_update",
+            "newsletter",
+        }:
+            identities.update(
+                f"article:url:{url}"
+                for url in extract_urls(record.message)
+            )
+
+        if record.message.strip():
+            identities.update(
+                get_content_identities(
+                    record.content_type or "text",
+                    record.message,
+                )
+            )
+
+    return identities
+
+
+def _is_content_identity_conflict(error: IntegrityError) -> bool:
+    original = error.orig
+    constraint_name = getattr(
+        getattr(original, "diag", None),
+        "constraint_name",
+        None,
+    )
+    if constraint_name == CONTENT_IDENTITY_INDEX:
+        return True
+
+    message = str(original).lower()
+    return (
+        CONTENT_IDENTITY_INDEX in message
+        or (
+            "unique constraint failed" in message
+            and "nurture_content_identities.lead_id" in message
+            and "nurture_content_identities.identity" in message
+        )
+    )
+
+
+# =========================================================
+# SAME DAY DUPLICATE CHECK
+=======
 # SAME-DAY DUPLICATE CHECK
+>>>>>>> origin/main
 # =========================================================
 
 def has_nurture_today(
@@ -269,11 +373,15 @@ def get_engagement_history(
 # PREPARE NURTURE FOR LEAD
 # =========================================================
 
-def prepare_nurture_for_lead(
+def _prepare_nurture_for_lead_locked(
     db: Session,
     lead_id: int,
     current_time: Optional[datetime] = None,
     batch_available: bool = False,
+    approved_content: Optional[
+        Mapping[str, List[str | Mapping[str, Any]]]
+    ] = None,
+    dedup_test_content_type: Optional[str] = None,
 ):
 
     if current_time is None:
@@ -287,7 +395,14 @@ def prepare_nurture_for_lead(
 
     lead = (
         db.query(Lead)
+<<<<<<< HEAD
+        .filter(
+            Lead.id == lead_id
+        )
+        .with_for_update()
+=======
         .filter(Lead.id == lead_id)
+>>>>>>> origin/main
         .first()
     )
 
@@ -344,11 +459,24 @@ def prepare_nurture_for_lead(
         current_time,
     )
 
+    if (
+        approved_content is not None
+        and "batch_update" in approved_content
+    ):
+        batch_candidates = list(
+            approved_content.get("batch_update") or []
+        )
+    else:
+        batch_candidates = load_approved_batch_candidates(
+            get_content_topic(lead.interest)
+        )
+    batch_available = batch_available or bool(batch_candidates)
+
     # -----------------------------------------------------
     # 6. SAME-DAY DUPLICATE PROTECTION
     # -----------------------------------------------------
 
-    if has_nurture_today(
+    if dedup_test_content_type is None and has_nurture_today(
         db,
         lead_id,
         current_time,
@@ -362,6 +490,36 @@ def prepare_nurture_for_lead(
     # 7. ASK ENGAGEMENT ENGINE
     # -----------------------------------------------------
 
+<<<<<<< HEAD
+    if dedup_test_content_type is not None:
+        decision = {
+            "eligible": True,
+            "reason": "dedup_test_selection",
+            "content_type": dedup_test_content_type,
+            "topic": get_content_topic(lead.interest),
+        }
+    else:
+        decision = decide_engagement(
+            ai_temperature=lead.ai_temperature,
+            interest=lead.interest,
+            lead_status=lead.status,
+            last_lead_message=latest_message,
+            last_sent_at=history[
+                "last_sent_at"
+            ],
+            messages_sent_last_30_days=history[
+                "messages_sent_last_30_days"
+            ],
+            previous_content_types=history[
+                "previous_content_types"
+            ],
+            lead_replied_recently=history[
+                "lead_replied_recently"
+            ],
+            batch_available=batch_available,
+            current_time=current_time,
+        )
+=======
     decision = decide_engagement(
         ai_temperature=lead.ai_temperature,
         interest=lead.interest,
@@ -380,6 +538,7 @@ def prepare_nurture_for_lead(
         batch_available=batch_available,
         current_time=current_time,
     )
+>>>>>>> origin/main
 
     # -----------------------------------------------------
     # 8. ENGAGEMENT NOT ALLOWED
@@ -398,9 +557,34 @@ def prepare_nurture_for_lead(
     # 9. GET APPROVED CONTENT
     # -----------------------------------------------------
 
+    previously_used_identities = (
+        get_previous_content_identities(
+            db,
+            lead_id,
+        )
+    )
+
+    content_candidates = (
+        approved_content.get(content_type, [])
+        if approved_content
+        else None
+    )
+    if content_type == "batch_update":
+        content_candidates = batch_candidates
+    if (
+        content_candidates is None
+        and content_type in {"industry_update", "newsletter"}
+    ):
+        content_candidates = load_approved_article_candidates(
+            content_type,
+            topic,
+            current_time,
+        )
     content_result = get_content(
         content_type,
         topic,
+        previously_used_identities=previously_used_identities,
+        approved_items=content_candidates,
     )
 
     # -----------------------------------------------------
@@ -421,6 +605,7 @@ def prepare_nurture_for_lead(
             "previous_content_types": history[
                 "previous_content_types"
             ],
+            "deduplication": content_result.get("deduplication"),
         }
 
     # -----------------------------------------------------
@@ -438,6 +623,13 @@ def prepare_nurture_for_lead(
             "content_type": content_type,
             "topic": topic,
         }
+
+    content_identities = content_result.get(
+        "content_identities"
+    ) or get_content_identities(
+        content_type,
+        message,
+    )
 
     # -----------------------------------------------------
     # 12. PERSONALIZE APPROVED CONTENT
@@ -488,9 +680,56 @@ def prepare_nurture_for_lead(
         db.commit()
         db.refresh(nurture_record)
 
+<<<<<<< HEAD
+    db.flush()
+
+    db.add_all(
+        [
+            NurtureContentIdentity(
+                lead_id=lead.id,
+                nurture_id=nurture_record.id,
+                identity=identity,
+            )
+            for identity in content_identities
+        ]
+    )
+    try:
+        db.flush()
+    except IntegrityError as error:
+        db.rollback()
+        if not _is_content_identity_conflict(error):
+            raise
+        return {
+            "eligible": True,
+            "ready_to_send": False,
+            "reason": "duplicate_content_conflict",
+            "lead_id": lead.id,
+            "content_type": content_type,
+            "topic": topic,
+        }
+
+    image_metadata = content_result.get("image_metadata")
+    if image_metadata:
+        db.add(
+            NurtureImageMetadata(
+                nurture_id=nurture_record.id,
+                image_id=image_metadata["image_id"],
+                canonical_url=image_metadata["canonical_url"],
+                topic=image_metadata["topic"],
+                source=image_metadata["source"],
+                approved=image_metadata["approved"],
+                content_hash=image_metadata["content_hash"],
+            )
+        )
+    db.commit()
+    db.refresh(
+        nurture_record
+    )
+=======
     except Exception:
         db.rollback()
         raise
+>>>>>>> origin/main
 
     # -----------------------------------------------------
     # 15. RETURN GENERATED MESSAGE
@@ -511,8 +750,76 @@ def prepare_nurture_for_lead(
         "previous_content_types": history[
             "previous_content_types"
         ],
+<<<<<<< HEAD
+        "message": (
+            nurture_record.message
+        ),
+        "deduplication": {
+            **(content_result.get("deduplication") or {}),
+            "persisted": True,
+            "persisted_identities": sorted(content_identities),
+        },
+        "image": (
+            {
+                **image_metadata,
+                "image_url": content_result.get("image_url"),
+            }
+            if image_metadata
+            else None
+        ),
+=======
         "message": nurture_record.message,
+>>>>>>> origin/main
     }
+
+
+def prepare_nurture_for_lead(
+    db: Session,
+    lead_id: int,
+    current_time: Optional[datetime] = None,
+    batch_available: bool = False,
+    approved_content: Optional[
+        Mapping[str, List[str | Mapping[str, Any]]]
+    ] = None,
+):
+    try:
+        result = _prepare_nurture_for_lead_locked(
+            db=db,
+            lead_id=lead_id,
+            current_time=current_time,
+            batch_available=batch_available,
+            approved_content=approved_content,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    if db.in_transaction():
+        db.rollback()
+    return result
+
+
+def prepare_dedup_test_for_lead(
+    db: Session,
+    lead_id: int,
+    content_type: str,
+    approved_candidates: List[Mapping[str, Any]],
+):
+    """Run the normal selector against explicitly supplied test fixtures."""
+    try:
+        result = _prepare_nurture_for_lead_locked(
+            db=db,
+            lead_id=lead_id,
+            approved_content={content_type: approved_candidates},
+            dedup_test_content_type=content_type,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    if db.in_transaction():
+        db.rollback()
+    return result
 
 
 # =========================================================

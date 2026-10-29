@@ -55,19 +55,14 @@ def is_opted_out(message: Optional[str]) -> bool:
 
     text = message.lower().strip()
 
-    return any(
-        phrase in text
-        for phrase in OPT_OUT_PHRASES
-    )
+    return any(phrase in text for phrase in OPT_OUT_PHRASES)
 
 
 # =========================================================
 # INTEREST NORMALIZATION
 # =========================================================
 
-def normalize_interest(
-    interest: Optional[str],
-) -> str:
+def normalize_interest(interest: Optional[str]) -> str:
 
     if not interest:
         return "cloud"
@@ -96,13 +91,9 @@ def normalize_interest(
 # CONTENT TOPIC
 # =========================================================
 
-def get_content_topic(
-    interest: Optional[str],
-) -> str:
+def get_content_topic(interest: Optional[str]) -> str:
 
-    normalized = normalize_interest(
-        interest
-    )
+    normalized = normalize_interest(interest)
 
     topics = {
         "aws": "AWS Cloud Engineering",
@@ -114,7 +105,7 @@ def get_content_topic(
 
     return topics.get(
         normalized,
-        "Cloud Engineering",
+        "Cloud Engineering"
     )
 
 
@@ -122,28 +113,22 @@ def get_content_topic(
 # ENGAGEMENT FREQUENCY
 # =========================================================
 
-def get_minimum_gap_days(
-    ai_temperature: str,
-) -> int:
+def get_minimum_gap_days(ai_temperature: str) -> int:
     """
     Minimum gap before another automatic engagement.
 
     COLD:
-        Light nurturing.
         Don't contact too frequently.
 
     WARM:
-        More active nurturing because
-        the lead has shown stronger interest.
+        Slightly more active because the lead has shown interest.
 
     HOT:
         Automatic nurturing stops.
-        HOT leads go to sales workflow.
+        HOT leads go to sales-alert workflow.
     """
 
-    temperature = (
-        ai_temperature or "cold"
-    ).lower()
+    temperature = (ai_temperature or "cold").lower()
 
     if temperature == "warm":
         return 5
@@ -154,29 +139,23 @@ def get_minimum_gap_days(
     return 0
 
 
-def get_monthly_limit(
-    ai_temperature: str,
-) -> int:
+def get_monthly_limit(ai_temperature: str) -> int:
     """
     Safety limit.
 
     This is NOT a target.
 
-    COLD:
-        Maximum 3 automatic messages
-        during the 30-day period.
+    Example:
+        limit = 3
 
-    WARM:
-        Maximum 4 automatic messages
-        during the 30-day period.
+    does NOT mean we must send 3 messages.
 
-    HOT:
-        No automatic nurturing.
+    It only means:
+        never send more than 3 automatic engagement
+        messages during the period.
     """
 
-    temperature = (
-        ai_temperature or "cold"
-    ).lower()
+    temperature = (ai_temperature or "cold").lower()
 
     if temperature == "cold":
         return 3
@@ -188,107 +167,48 @@ def get_monthly_limit(
 
 
 # =========================================================
-# CONTENT SELECTION
+# DUPLICATE CONTENT PROTECTION
 # =========================================================
 
 def choose_content_type(
-    ai_temperature: str,
-    previous_content_types: Optional[
-        List[str]
-    ] = None,
+    previous_content_types: Optional[List[str]] = None,
     batch_available: bool = False,
 ) -> Optional[str]:
-    """
-    Select content based on lead temperature.
 
-    COLD:
-        Light nurturing only.
-
-        - educational
-        - career_tip
-
-    WARM:
-        Active nurturing.
-
-        - educational
-        - career_tip
-        - industry_update
-        - image
-        - newsletter
-        - real batch_update
-
-    HOT:
-        No nurturing content.
-    """
-
-    previous_content_types = (
-        previous_content_types or []
-    )
-
-    temperature = (
-        ai_temperature or "cold"
-    ).lower()
+    previous_content_types = previous_content_types or []
 
     # Look only at recent content types
-    # to avoid repeating the same type.
     recent = previous_content_types[-3:]
 
-    # =====================================================
-    # COLD LEAD
-    # =====================================================
+    # -----------------------------------------------------
+    # Batch announcement has priority when a REAL batch
+    # exists, but don't repeat it continuously.
+    # -----------------------------------------------------
 
-    if temperature == "cold":
+    if batch_available and "batch_update" not in recent:
+        return "batch_update"
 
-        cold_rotation = [
-            "educational",
-            "career_tip",
-        ]
+    # -----------------------------------------------------
+    # Rotate useful content
+    # -----------------------------------------------------
 
-        for content_type in cold_rotation:
+    rotation = [
+        "educational",
+        "career_tip",
+        "industry_update",
+        "image",
+        "newsletter",
+    ]
 
-            if content_type not in recent:
-                return content_type
+    for content_type in rotation:
 
-        # Both appeared recently.
-        # Restart with educational content.
-        return "educational"
+        if content_type not in recent:
+            return content_type
 
-    # =====================================================
-    # WARM LEAD
-    # =====================================================
+    # If everything appeared recently,
+    # restart with educational content.
 
-    if temperature == "warm":
-
-        # A batch update can only be selected
-        # when a REAL batch is available.
-        if (
-            batch_available
-            and "batch_update" not in recent
-        ):
-            return "batch_update"
-
-        warm_rotation = [
-            "educational",
-            "career_tip",
-            "industry_update",
-            "image",
-            "newsletter",
-        ]
-
-        for content_type in warm_rotation:
-
-            if content_type not in recent:
-                return content_type
-
-        # If all available content types
-        # were recently used, restart.
-        return "educational"
-
-    # =====================================================
-    # HOT / UNKNOWN
-    # =====================================================
-
-    return None
+    return "educational"
 
 
 # =========================================================
@@ -303,22 +223,17 @@ def decide_engagement(
     last_lead_message: Optional[str] = None,
     last_sent_at: Optional[datetime] = None,
     messages_sent_last_30_days: int = 0,
-    previous_content_types: Optional[
-        List[str]
-    ] = None,
+    previous_content_types: Optional[List[str]] = None,
     lead_replied_recently: bool = False,
     batch_available: bool = False,
     current_time: Optional[datetime] = None,
 ) -> dict:
 
     """
-    Decide whether the lead should receive
-    an automatic engagement message.
+    Decide whether the lead should receive an engagement message.
 
     IMPORTANT:
-
-    This function does NOT send WhatsApp
-    messages.
+    This function does NOT send WhatsApp messages.
 
     It only decides:
 
@@ -329,21 +244,14 @@ def decide_engagement(
     """
 
     if current_time is None:
-        current_time = datetime.now(
-            INDIA_TIMEZONE
-        )
+        current_time = datetime.now(INDIA_TIMEZONE)
 
-    temperature = (
-        ai_temperature or "cold"
-    ).lower()
+    temperature = (ai_temperature or "cold").lower()
 
-    status = (
-        lead_status or "new"
-    ).lower()
+    status = (lead_status or "new").lower()
 
-    previous_content_types = (
-        previous_content_types or []
-    )
+    previous_content_types = previous_content_types or []
+
 
     # =====================================================
     # 1. CLOSED LEADS
@@ -362,13 +270,12 @@ def decide_engagement(
             "topic": None,
         }
 
+
     # =====================================================
     # 2. EXPLICIT OPT-OUT
     # =====================================================
 
-    if is_opted_out(
-        last_lead_message
-    ):
+    if is_opted_out(last_lead_message):
 
         return {
             "eligible": False,
@@ -376,6 +283,7 @@ def decide_engagement(
             "content_type": None,
             "topic": None,
         }
+
 
     # =====================================================
     # 3. HOT LEAD
@@ -390,6 +298,7 @@ def decide_engagement(
             "topic": None,
         }
 
+
     # =====================================================
     # 4. RECENT LEAD REPLY
     # =====================================================
@@ -398,98 +307,71 @@ def decide_engagement(
 
         return {
             "eligible": False,
-            "reason": (
-                "lead_replied_wait_for_ai_conversation"
-            ),
+            "reason": "lead_replied_wait_for_ai_conversation",
             "content_type": None,
             "topic": None,
         }
+
 
     # =====================================================
     # 5. MONTHLY SAFETY LIMIT
     # =====================================================
 
-    monthly_limit = get_monthly_limit(
-        temperature
-    )
+    monthly_limit = get_monthly_limit(temperature)
 
-    if (
-        messages_sent_last_30_days
-        >= monthly_limit
-    ):
+    if messages_sent_last_30_days >= monthly_limit:
 
         return {
             "eligible": False,
-            "reason": (
-                "monthly_safety_limit_reached"
-            ),
+            "reason": "monthly_safety_limit_reached",
             "content_type": None,
             "topic": None,
         }
+
 
     # =====================================================
     # 6. FREQUENCY / GAP CHECK
     # =====================================================
 
-    minimum_gap_days = (
-        get_minimum_gap_days(
-            temperature
-        )
+    minimum_gap_days = get_minimum_gap_days(
+        temperature
     )
 
     if last_sent_at:
 
-        # Make timezone aware if the DB
-        # returned a naive datetime.
+        # Make timezone aware if DB returned naive datetime
         if last_sent_at.tzinfo is None:
-
-            last_sent_at = (
-                last_sent_at.replace(
-                    tzinfo=INDIA_TIMEZONE
-                )
+            last_sent_at = last_sent_at.replace(
+                tzinfo=INDIA_TIMEZONE
             )
 
         next_allowed_time = (
             last_sent_at
-            + timedelta(
-                days=minimum_gap_days
-            )
+            + timedelta(days=minimum_gap_days)
         )
 
-        if (
-            current_time
-            < next_allowed_time
-        ):
+        if current_time < next_allowed_time:
 
             return {
                 "eligible": False,
-                "reason": (
-                    "waiting_for_next_engagement_window"
-                ),
+                "reason": "waiting_for_next_engagement_window",
                 "content_type": None,
-                "topic": get_content_topic(
-                    interest
-                ),
-                "next_allowed_at": (
-                    next_allowed_time.isoformat()
-                ),
+                "topic": get_content_topic(interest),
+                "next_allowed_at": next_allowed_time.isoformat(),
             }
+
 
     # =====================================================
     # 7. SELECT CONTENT
     # =====================================================
 
     content_type = choose_content_type(
-        ai_temperature=temperature,
-        previous_content_types=(
-            previous_content_types
-        ),
+        previous_content_types=previous_content_types,
         batch_available=batch_available,
     )
 
-    topic = get_content_topic(
-        interest
-    )
+    topic = get_content_topic(interest)
+
 
     # =====================================================
     # 8. FINAL DECISION
@@ -501,13 +383,7 @@ def decide_engagement(
         "content_type": content_type,
         "topic": topic,
         "ai_temperature": temperature,
-        "messages_sent_last_30_days": (
-            messages_sent_last_30_days
-        ),
-        "monthly_safety_limit": (
-            monthly_limit
-        ),
-        "minimum_gap_days": (
-            minimum_gap_days
-        ),
+        "messages_sent_last_30_days": messages_sent_last_30_days,
+        "monthly_safety_limit": monthly_limit,
+        "minimum_gap_days": minimum_gap_days,
     }

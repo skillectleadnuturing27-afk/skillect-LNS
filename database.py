@@ -1,8 +1,10 @@
+from collections.abc import Mapping
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -15,7 +17,8 @@ ENV_FILE = BASE_DIR / ".env"
 
 load_dotenv(
     dotenv_path=ENV_FILE,
-    override=True,
+    # Keep deployment-provided values authoritative over local defaults.
+    override=False,
 )
 
 
@@ -23,35 +26,43 @@ load_dotenv(
 # DATABASE CONFIG
 # =========================================================
 
-DB_USERNAME = os.getenv("DB_USERNAME")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME")
+def build_database_url(environment: Mapping[str, str]) -> URL:
+    # Accept a complete deployment URL without rebuilding or exposing credentials.
+    configured_url = environment.get("DATABASE_URL")
+    if configured_url:
+        return make_url(configured_url)
+
+    required_values = {
+        key: environment.get(key)
+        for key in ("DB_USERNAME", "DB_PASSWORD", "DB_NAME")
+    }
+    missing_values = [
+        key for key, value in required_values.items() if not value
+    ]
+    if missing_values:
+        raise ValueError(
+            "Missing database configuration: "
+            + ", ".join(missing_values)
+            + ". Set DATABASE_URL or the DB_USERNAME, DB_PASSWORD, and "
+            "DB_NAME variables in the process environment or root .env."
+        )
+
+    try:
+        port = int(environment.get("DB_PORT", "5432"))
+    except ValueError as error:
+        raise ValueError("DB_PORT must be an integer") from error
+
+    return URL.create(
+        "postgresql+psycopg2",
+        username=required_values["DB_USERNAME"],
+        password=required_values["DB_PASSWORD"],
+        host=environment.get("DB_HOST") or "localhost",
+        port=port,
+        database=required_values["DB_NAME"],
+    )
 
 
-# =========================================================
-# VALIDATION
-# =========================================================
-
-if not DB_USERNAME:
-    raise ValueError("DB_USERNAME is missing from .env")
-
-if not DB_PASSWORD:
-    raise ValueError("DB_PASSWORD is missing from .env")
-
-if not DB_NAME:
-    raise ValueError("DB_NAME is missing from .env")
-
-
-# =========================================================
-# DATABASE URL
-# =========================================================
-
-DATABASE_URL = (
-    f"postgresql://{DB_USERNAME}:{DB_PASSWORD}"
-    f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+DATABASE_URL = build_database_url(os.environ)
 
 
 # =========================================================

@@ -405,3 +405,42 @@ class LeadStatsResponse(BaseModel):
     total: int
     status: LeadStatusStats
     temperature: LeadTemperatureStats
+
+
+# =========================================================
+# LEAD ALERTS
+# =========================================================
+
+LeadAlertStatus = Literal["active", "acknowledged", "resolved"]
+
+
+class LeadAlertStatusUpdate(BaseModel):
+    status: LeadAlertStatus
+
+
+class LeadAlertLeadSummary(BaseModel):
+    id: int
+    name: str
+    email: str
+    phone: str
+    source: str
+    lead_score: int
+    lead_temperature: str
+    ai_score: int
+    ai_temperature: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LeadAlertResponse(BaseModel):
+    id: int
+    lead_id: int
+    alert_type: str
+    reason: str
+    score: int
+    qualification_summary: str
+    status: LeadAlertStatus
+    created_at: datetime
+    lead: LeadAlertLeadSummary
+
+    model_config = ConfigDict(from_attributes=True)

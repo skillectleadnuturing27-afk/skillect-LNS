@@ -64,14 +64,18 @@ def get_source_domain(
         if parsed.scheme not in {"http", "https"}:
             return None
 
-        domain = parsed.netloc.lower().strip()
+        hostname = parsed.hostname
+        if not hostname:
+            return None
+
+        domain = hostname.encode("idna").decode("ascii").lower()
 
         if domain.startswith("www."):
             domain = domain[4:]
 
         return domain or None
 
-    except Exception:
+    except (TypeError, ValueError, UnicodeError):
         return None
 
 

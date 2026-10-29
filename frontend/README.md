@@ -11,6 +11,12 @@ This is the third team member's Next.js/React deliverable for the AI Lead Nurtur
 
 With no `NEXT_PUBLIC_API_URL`, the dashboard presents included demo leads. For the integrated version, set it to the FastAPI host (for example `http://localhost:8000`).
 
+The HOT Lead Alerts panel uses the same `NEXT_PUBLIC_API_URL` setting to load
+`GET /alerts` and update an alert with
+`PATCH /alerts/{alert_id}/status`. Alerts are loaded independently of the
+dashboard's demo/local-storage lead list, so lead details shown in each alert
+come from the backend API.
+
 ## Backend API contract
 
 The frontend expects the backend owner to implement these CORS-enabled endpoints:

@@ -1,7 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { type Lead, type LeadStatus } from "../lib/api";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  type Lead,
+  type LeadAlert,
+  type LeadAlertStatus,
+  type LeadStatus,
+} from "../lib/api";
 
 // ==================================================
 // TYPES
@@ -26,6 +37,21 @@ type FollowUpStatus =
 
 const LEADS_STORAGE_KEY = "leadflow-leads";
 const FOLLOWUPS_STORAGE_KEY = "leadflow-followups";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
+  "http://localhost:8000";
+
+function getApiError(payload: unknown, fallback: string): string {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "detail" in payload &&
+    typeof payload.detail === "string"
+  ) {
+    return payload.detail;
+  }
+  return fallback;
+}
 
 const statusClass: Record<LeadStatus, string> = {
   new: "blue",
@@ -228,6 +254,78 @@ const [followUpFilter, setFollowUpFilter] =
 
   const [savedFollowUps, setSavedFollowUps] =
     useState<Record<string, FollowUp>>({});
+  const [alerts, setAlerts] = useState<LeadAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [alertsError, setAlertsError] = useState("");
+  const [updatingAlertId, setUpdatingAlertId] = useState<number | null>(null);
+
+  const loadAlerts = useCallback(async () => {
+    setAlertsLoading(true);
+    setAlertsError("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/alerts?limit=100`, {
+        headers: { Accept: "application/json" },
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          getApiError(payload, `Unable to load sales alerts (HTTP ${response.status}).`),
+        );
+      }
+      if (!Array.isArray(payload)) {
+        throw new Error("The alerts API returned an invalid response.");
+      }
+      setAlerts(payload as LeadAlert[]);
+    } catch (requestError) {
+      setAlertsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to connect to the sales alerts API.",
+      );
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, []);
+
+  async function updateAlertStatus(
+    alertId: number,
+    status: LeadAlertStatus,
+  ) {
+    setUpdatingAlertId(alertId);
+    setAlertsError("");
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/alerts/${alertId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status }),
+        },
+      );
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          getApiError(payload, `Unable to update alert (HTTP ${response.status}).`),
+        );
+      }
+      await loadAlerts();
+    } catch (requestError) {
+      setAlertsError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to update the sales alert.",
+      );
+    } finally {
+      setUpdatingAlertId(null);
+    }
+  }
+
+  useEffect(() => {
+    void loadAlerts();
+  }, [loadAlerts]);
 
   // ==================================================
   // LOAD LOCAL STORAGE
@@ -449,6 +547,9 @@ useEffect(() => {
         getFollowUpStatus(item.date, item.time) ===
         "Overdue"
     ).length;
+  const hotAlerts = alerts.filter(
+    (alert) => alert.alert_type === "hot_lead",
+  );
 
   // ==================================================
   // OPEN LEAD
@@ -926,6 +1027,104 @@ useEffect(() => {
   
   </div>
 </section>
+
+      <section
+        className="sales-alerts-section"
+        aria-label="HOT lead sales alerts"
+      >
+        <div className="sales-alerts-heading">
+          <div>
+            <p className="eyebrow">SALES FOLLOW-UP</p>
+            <h2>HOT Lead Alerts</h2>
+          </div>
+          <button
+            type="button"
+            className="alert-refresh-button"
+            onClick={() => void loadAlerts()}
+            disabled={alertsLoading}
+          >
+            {alertsLoading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+
+        {alertsLoading ? (
+          <p className="alerts-message" role="status">
+            Loading HOT lead alerts…
+          </p>
+        ) : alertsError ? (
+          <div className="alerts-error" role="alert">
+            <span>{alertsError}</span>
+            <button type="button" onClick={() => void loadAlerts()}>
+              Try again
+            </button>
+          </div>
+        ) : hotAlerts.length === 0 ? (
+          <p className="alerts-message">
+            No HOT lead alerts have been recorded.
+          </p>
+        ) : (
+          <ul className="sales-alert-list">
+            {hotAlerts.map((alert) => (
+              <li className="sales-alert-card" key={alert.id}>
+                <div className="sales-alert-main">
+                  <div className="sales-alert-title">
+                    <strong>{alert.lead.name}</strong>
+                    <span className={`alert-status alert-status-${alert.status}`}>
+                      {alert.status}
+                    </span>
+                  </div>
+                  <p className="sales-alert-contact">
+                    {alert.lead.email} · {alert.lead.phone}
+                  </p>
+                  <p className="sales-alert-reason">{alert.reason}</p>
+                  <p className="sales-alert-qualification">
+                    <strong>Qualification:</strong> {alert.qualification_summary}
+                  </p>
+                  <div className="sales-alert-meta">
+                    <span>Alert score: {alert.score}</span>
+                    <span>
+                      CRM {alert.lead.lead_temperature} ({alert.lead.lead_score})
+                    </span>
+                    <span>
+                      AI {alert.lead.ai_temperature} ({alert.lead.ai_score})
+                    </span>
+                    <time dateTime={alert.created_at}>
+                      {new Date(alert.created_at).toLocaleString()}
+                    </time>
+                  </div>
+                </div>
+                {alert.status !== "resolved" && (
+                  <div className="sales-alert-actions">
+                    {alert.status === "active" && (
+                      <button
+                        type="button"
+                        disabled={updatingAlertId === alert.id}
+                        onClick={() =>
+                          void updateAlertStatus(alert.id, "acknowledged")
+                        }
+                      >
+                        {updatingAlertId === alert.id
+                          ? "Saving…"
+                          : "Acknowledge"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="resolve-alert-button"
+                      disabled={updatingAlertId === alert.id}
+                      onClick={() =>
+                        void updateAlertStatus(alert.id, "resolved")
+                      }
+                    >
+                      {updatingAlertId === alert.id ? "Saving…" : "Resolve"}
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
 
       {/* WORKSPACE */}

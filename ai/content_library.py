@@ -1,5 +1,8 @@
 from typing import Optional, Dict, Any
+from collections.abc import Iterable, Mapping
 
+from ai.content_dedup import select_content_item_with_report
+from ai.image_library import get_image_content
 
 # =========================================================
 # APPROVED EDUCATIONAL CONTENT
@@ -93,6 +96,8 @@ def get_career_content(
 def get_content(
     content_type: Optional[str],
     topic: Optional[str],
+    previously_used_identities: Optional[set[str]] = None,
+    approved_items: Optional[Iterable[Mapping[str, Any] | str]] = None,
 ) -> Dict[str, Any]:
 
     if not content_type:
@@ -106,6 +111,11 @@ def get_content(
         }
 
     content_type = content_type.lower().strip()
+    previously_used_identities = (
+        previously_used_identities or set()
+    )
+    approved_items_were_provided = approved_items is not None
+    approved_items = list(approved_items or [])
 
     # -----------------------------------------------------
     # EDUCATIONAL
@@ -113,7 +123,33 @@ def get_content(
 
     if content_type == "educational":
 
-        message = get_educational_content(topic)
+        approved_message = get_educational_content(topic)
+        candidates = approved_items or (
+            [approved_message]
+            if approved_message
+            else []
+        )
+        candidate_messages = [
+            (
+                candidate
+                if isinstance(candidate, str)
+                else candidate.get("message")
+                or candidate.get("text")
+                or candidate.get("content")
+            )
+            for candidate in candidates
+        ]
+        candidate_messages = [
+            candidate
+            for candidate in candidate_messages
+            if candidate
+        ]
+        selected, identities, deduplication = select_content_item_with_report(
+            content_type,
+            candidate_messages,
+            previously_used_identities,
+        )
+        message = selected if isinstance(selected, str) else None
 
         if not message:
 
@@ -123,6 +159,7 @@ def get_content(
                 "content_type": content_type,
                 "topic": topic,
                 "message": None,
+                "deduplication": deduplication,
             }
 
         return {
@@ -131,6 +168,8 @@ def get_content(
             "content_type": content_type,
             "topic": topic,
             "message": message,
+            "content_identities": identities,
+            "deduplication": deduplication,
         }
 
     # -----------------------------------------------------
@@ -139,7 +178,33 @@ def get_content(
 
     if content_type == "career_tip":
 
-        message = get_career_content(topic)
+        approved_message = get_career_content(topic)
+        candidates = approved_items or (
+            [approved_message]
+            if approved_message
+            else []
+        )
+        candidate_messages = [
+            (
+                candidate
+                if isinstance(candidate, str)
+                else candidate.get("message")
+                or candidate.get("text")
+                or candidate.get("content")
+            )
+            for candidate in candidates
+        ]
+        candidate_messages = [
+            candidate
+            for candidate in candidate_messages
+            if candidate
+        ]
+        selected, identities, deduplication = select_content_item_with_report(
+            content_type,
+            candidate_messages,
+            previously_used_identities,
+        )
+        message = selected if isinstance(selected, str) else None
 
         if not message:
 
@@ -149,6 +214,7 @@ def get_content(
                 "content_type": content_type,
                 "topic": topic,
                 "message": None,
+                "deduplication": deduplication,
             }
 
         return {
@@ -157,6 +223,47 @@ def get_content(
             "content_type": content_type,
             "topic": topic,
             "message": message,
+            "content_identities": identities,
+            "deduplication": deduplication,
+        }
+
+    if content_type == "image":
+        image_result = get_image_content(
+            topic,
+            previously_used_identities=previously_used_identities,
+            approved_items=(
+                approved_items
+                if approved_items_were_provided
+                else None
+            ),
+        )
+        if not image_result.get("ready"):
+            return {
+                **image_result,
+                "content_type": content_type,
+                "message": None,
+            }
+
+        image_url = image_result.get("image_url")
+        image_id = image_result.get("image_id")
+        metadata = {
+            "image_id": image_id,
+            "canonical_url": image_result.get("canonical_url"),
+            "topic": image_result.get("topic"),
+            "source": image_result.get("source"),
+            "approved": image_result.get("approved"),
+            "content_hash": image_result.get("content_hash"),
+        }
+        return {
+            "ready": True,
+            "reason": image_result["reason"],
+            "content_type": content_type,
+            "topic": topic,
+            "message": image_url or image_id,
+            "image_url": image_url,
+            "image_metadata": metadata,
+            "content_identities": image_result["content_identities"],
+            "deduplication": image_result["deduplication"],
         }
 
     # -----------------------------------------------------
@@ -167,18 +274,87 @@ def get_content(
     #
     # industry_update -> trusted verified source
     # newsletter      -> approved content
-    # image           -> approved image/infographic
     # batch_update    -> real batch data
     # -----------------------------------------------------
 
     if content_type in VERIFIED_CONTENT_TYPES:
 
+        candidates = approved_items
+        if content_type in {"industry_update", "newsletter"}:
+            candidates = [
+                item
+                for item in candidates
+                if isinstance(item, Mapping)
+                and item.get("verified") is True
+            ]
+        prepared_candidates = []
+        for item in candidates:
+            if isinstance(item, str):
+                if content_type == "image":
+                    prepared_candidates.append(
+                        {
+                            "image_url": item,
+                            "message": item,
+                        }
+                    )
+                elif content_type == "batch_update":
+                    raise ValueError(
+                        "Batch update content must include a stable batch identifier"
+                    )
+                else:
+                    prepared_candidates.append(item)
+                continue
+
+            item_message = (
+                item.get("message")
+                or item.get("summary")
+                or item.get("text")
+            )
+            if item_message:
+                prepared_candidates.append(
+                    {
+                        **item,
+                        "message": item_message,
+                    }
+                )
+
+        if prepared_candidates:
+            selected, identities, deduplication = (
+                select_content_item_with_report(
+                content_type,
+                prepared_candidates,
+                previously_used_identities,
+                )
+            )
+            if selected:
+                message = (
+                    selected
+                    if isinstance(selected, str)
+                    else selected.get("share_message")
+                    or selected.get("message")
+                )
+                return {
+                    "ready": True,
+                    "reason": "approved_content_found",
+                    "content_type": content_type,
+                    "topic": topic,
+                    "message": message,
+                    "content_identities": identities,
+                    "deduplication": deduplication,
+                }
+
+        _, _, deduplication = select_content_item_with_report(
+            content_type,
+            prepared_candidates,
+            previously_used_identities,
+        )
         return {
             "ready": False,
             "reason": "verified_content_required",
             "content_type": content_type,
             "topic": topic,
             "message": None,
+            "deduplication": deduplication,
         }
 
     # -----------------------------------------------------
@@ -192,41 +368,3 @@ def get_content(
         "topic": topic,
         "message": None,
     }
-# =========================================================
-# PERSONALIZE APPROVED NURTURE CONTENT
-# =========================================================
-
-def personalize_content(
-    message: str,
-    lead_name: Optional[str] = None,
-    interest: Optional[str] = None,
-    budget: Optional[Any] = None,
-    timeline: Optional[str] = None,
-    requirement: Optional[str] = None,
-) -> str:
-    """Personalize approved content using saved lead details."""
-
-    parts = []
-
-    if lead_name and lead_name.strip():
-        parts.append(f"Hi {lead_name.strip()},")
-
-    parts.append(message.strip())
-
-    if interest and interest.strip():
-        parts.append(f"Your area of interest is {interest.strip()}.")
-
-    if timeline and timeline.strip():
-        parts.append(f"Your planned timeline is {timeline.strip()}.")
-
-    if requirement and requirement.strip():
-        parts.append(f"Your current goal is {requirement.strip()}.")
-
-    if budget is not None:
-        parts.append(f"Your indicated budget is {budget}.")
-
-    parts.append(
-        "Please let our team know if you would like more details."
-    )
-
-    return "\n\n".join(parts)

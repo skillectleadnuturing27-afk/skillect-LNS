@@ -1,0 +1,62 @@
+{
+  "educational": [
+    {
+      "message": "Approved dedup test text candidate alpha."
+    },
+    {
+      "message": "Approved dedup test text candidate beta."
+    }
+  ],
+  "industry_update": [
+    {
+      "content_id": "dedup-test-article-alpha",
+      "title": "Dedup test article alpha",
+      "source_url": "https://aws.amazon.com/blogs/aws/dedup-test-alpha",
+      "summary": "Approved dedup test article summary alpha.",
+      "message": "Approved dedup test article summary alpha.",
+      "share_message": "Dedup test article alpha\nApproved dedup test article summary alpha.\nhttps://aws.amazon.com/blogs/aws/dedup-test-alpha",
+      "verified": true
+    },
+    {
+      "content_id": "dedup-test-article-beta",
+      "title": "Dedup test article beta",
+      "source_url": "https://aws.amazon.com/blogs/aws/dedup-test-beta",
+      "summary": "Approved dedup test article summary beta.",
+      "message": "Approved dedup test article summary beta.",
+      "share_message": "Dedup test article beta\nApproved dedup test article summary beta.\nhttps://aws.amazon.com/blogs/aws/dedup-test-beta",
+      "verified": true
+    }
+  ],
+  "image": [
+    {
+      "image_id": "dedup-test-image-alpha",
+      "image_url": "https://images.example.test/dedup/alpha.png",
+      "topic": "AWS Cloud Engineering",
+      "source": "Bundled dedup test fixture",
+      "approved": true
+    },
+    {
+      "image_id": "dedup-test-image-beta",
+      "image_url": "https://images.example.test/dedup/beta.png",
+      "topic": "AWS Cloud Engineering",
+      "source": "Bundled dedup test fixture",
+      "approved": true
+    }
+  ],
+  "batch_update": [
+    {
+      "batch_id": "dedup-test-batch-alpha",
+      "topic": "AWS Cloud Engineering",
+      "source": "Bundled dedup test fixture",
+      "approved": true,
+      "message": "Approved dedup test batch update alpha."
+    },
+    {
+      "batch_id": "dedup-test-batch-beta",
+      "topic": "AWS Cloud Engineering",
+      "source": "Bundled dedup test fixture",
+      "approved": true,
+      "message": "Approved dedup test batch update beta."
+    }
+  ]
+}

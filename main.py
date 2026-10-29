@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import (
     FastAPI,
     Depends,
@@ -7,9 +9,9 @@ from fastapi import (
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import SQLAlchemyError
 
 from datetime import (
     datetime,
@@ -23,40 +25,11 @@ from typing import Optional
 import models
 import schemas
 
-from database import (
-    engine,
-    SessionLocal,
-)
-from sqlalchemy.engine import URL
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-
-TEST_DATABASE_URL = URL.create(
-    drivername="postgresql+psycopg2",
-    username=engine.url.username,
-    password=engine.url.password,
-    host=engine.url.host,
-    port=engine.url.port,
-    database="lead_db_test",
-)
-
-test_engine = create_engine(
-    TEST_DATABASE_URL,
-    pool_pre_ping=True,
-)
-
-TestSessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=test_engine,
-)
+from database import SessionLocal
+from lead_alerts import create_hot_lead_alert, is_hot_lead
 
 
-# =========================================================
-# CREATE DATABASE TABLES
-# =========================================================
-
-models.Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
 
 # =========================================================
@@ -87,6 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # =========================================================
 # DATABASE SESSION
 # =========================================================
@@ -95,14 +69,6 @@ def get_db():
 
     db = SessionLocal()
 
-    try:
-        yield db
-
-    finally:
-        db.close()
-
-def get_test_db():
-    db = TestSessionLocal()
     try:
         yield db
 
@@ -182,63 +148,6 @@ def calculate_lead_score(lead):
     return score
 
 
-
-def create_hot_lead_alert(db, lead):
-    score = calculate_lead_score(lead)
-
-    existing_alert = (
-        db.query(models.Alert)
-        .filter(
-            models.Alert.lead_id == lead.id,
-            models.Alert.alert_type == "hot_lead",
-            models.Alert.status == "active",
-        )
-        .first()
-    )
-
-    # Resolve active alert when the lead is no longer hot.
-    if score < 80:
-        if existing_alert:
-            existing_alert.status = "resolved"
-            existing_alert.reason = (
-                f"Automatically resolved: lead score dropped to {score}"
-            )
-        return None
-
-    # Update existing alert instead of creating a duplicate.
-    if existing_alert:
-        existing_alert.score = score
-        existing_alert.message = f"Hot lead detected: {lead.name}"
-        existing_alert.reason = "Lead score reached 80 or above"
-        existing_alert.qualification_summary = (
-            f"Status: {lead.status}; "
-            f"Source: {lead.source}; "
-            f"Score: {score}"
-        )
-        return existing_alert
-
-    # Create a new alert for a hot lead.
-    alert = models.Alert(
-        lead_id=lead.id,
-        alert_type="hot_lead",
-        message=f"Hot lead detected: {lead.name}",
-        status="active",
-        reason="Lead score reached 80 or above",
-        score=score,
-        qualification_summary=(
-            f"Status: {lead.status}; "
-            f"Source: {lead.source}; "
-            f"Score: {score}"
-        ),
-    )
-
-    db.add(alert)
-    db.flush()
-    return alert
-
-
-
-
 # =========================================================
 # HELPER - LEAD TEMPERATURE
 # =========================================================
@@ -299,7 +208,7 @@ def create_activity(
 
 @app.get("/")
 def root():
-    
+
     return {
         "message":
         "Skillect Lead Nurturing System API is running"
@@ -538,6 +447,121 @@ def get_hot_leads(
 
 
 # =========================================================
+# SALES ALERTS
+# =========================================================
+
+@app.get(
+    "/alerts",
+    response_model=list[schemas.LeadAlertResponse],
+)
+def get_alerts(
+    status: Optional[schemas.LeadAlertStatus] = Query(default=None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.LeadAlert).options(
+        joinedload(models.LeadAlert.lead)
+    )
+    if status:
+        query = query.filter(models.LeadAlert.status == status)
+    return (
+        query.order_by(
+            models.LeadAlert.created_at.desc(),
+            models.LeadAlert.id.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+@app.get(
+    "/alerts/{alert_id}",
+    response_model=schemas.LeadAlertResponse,
+)
+def get_alert(
+    alert_id: int,
+    db: Session = Depends(get_db),
+):
+    alert = (
+        db.query(models.LeadAlert)
+        .options(joinedload(models.LeadAlert.lead))
+        .filter(models.LeadAlert.id == alert_id)
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return alert
+
+
+@app.patch(
+    "/alerts/{alert_id}/status",
+    response_model=schemas.LeadAlertResponse,
+)
+def update_alert_status(
+    alert_id: int,
+    status_data: schemas.LeadAlertStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    alert = (
+        db.query(models.LeadAlert)
+        .filter(models.LeadAlert.id == alert_id)
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    lead = (
+        db.query(models.Lead)
+        .filter(models.Lead.id == alert.lead_id)
+        .with_for_update()
+        .first()
+    )
+    if not lead:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    alert = (
+        db.query(models.LeadAlert)
+        .filter(models.LeadAlert.id == alert_id)
+        .with_for_update()
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    if status_data.status == "active" and alert.status != "active":
+        active_alert = (
+            db.query(models.LeadAlert)
+            .filter(
+                models.LeadAlert.lead_id == alert.lead_id,
+                models.LeadAlert.alert_type == "hot_lead",
+                models.LeadAlert.status == "active",
+                models.LeadAlert.id != alert.id,
+            )
+            .first()
+        )
+        if active_alert:
+            raise HTTPException(
+                status_code=409,
+                detail="This lead already has an active HOT alert",
+            )
+
+    alert.status = status_data.status
+    try:
+        db.commit()
+    except SQLAlchemyError as error:
+        db.rollback()
+        logger.exception("Unable to update lead alert status")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to update alert status",
+        ) from error
+    db.refresh(alert)
+    return alert
+
+
+# =========================================================
 # ALL FOLLOW-UPS
 # =========================================================
 
@@ -683,39 +707,44 @@ def create_lead(
         follow_up_at=lead_data.follow_up_at,
     )
 
-  
     update_lead_score(lead)
 
     try:
+
         db.add(lead)
+
         db.flush()
+        create_hot_lead_alert(
+            db,
+            lead,
+            was_hot=False,
+            score=lead.lead_score,
+            reason=f"Lead became HOT with a CRM score of {lead.lead_score}.",
+        )
 
         create_activity(
             db=db,
             lead_id=lead.id,
             activity_type="lead_created",
-            description=f"Lead '{lead.name}' was created",
+            description=(
+                f"Lead '{lead.name}' was created"
+            ),
         )
 
         db.commit()
+
         db.refresh(lead)
 
-        create_hot_lead_alert(
-            db=db,
-            lead=lead,
-        )
-
-        db.commit()
-
     except IntegrityError:
+
         db.rollback()
+
         raise HTTPException(
             status_code=400,
             detail="Lead could not be created",
         )
 
     return lead
-
 
 
 # =========================================================
@@ -994,6 +1023,7 @@ def update_lead(
         .filter(
             models.Lead.id == lead_id
         )
+        .with_for_update()
         .first()
     )
 
@@ -1013,6 +1043,7 @@ def update_lead(
     old_status = lead.status
     old_notes = lead.notes
     old_followup = lead.follow_up_at
+    was_hot = is_hot_lead(lead)
 
     if "email" in update_data:
 
@@ -1049,6 +1080,13 @@ def update_lead(
         )
 
     update_lead_score(lead)
+    create_hot_lead_alert(
+        db,
+        lead,
+        was_hot=was_hot,
+        score=lead.lead_score,
+        reason=f"Lead became HOT with a CRM score of {lead.lead_score}.",
+    )
 
     if (
         "status" in update_data
@@ -1094,17 +1132,13 @@ def update_lead(
         )
 
     try:
+
         db.commit()
+
         db.refresh(lead)
 
-        create_hot_lead_alert(
-            db=db,
-            lead=lead,
-        )
-
-        db.commit()
-
     except IntegrityError:
+
         db.rollback()
 
         raise HTTPException(
@@ -1173,6 +1207,7 @@ def update_followup(
     lead = (
         db.query(models.Lead)
         .filter(models.Lead.id == lead_id)
+        .with_for_update()
         .first()
     )
 
@@ -1183,6 +1218,8 @@ def update_followup(
             detail="Lead not found",
         )
 
+    was_hot = is_hot_lead(lead)
+
     # Update follow-up date/time
     lead.follow_up_at = followup.follow_up_at
 
@@ -1192,6 +1229,13 @@ def update_followup(
 
     # Recalculate lead score
     update_lead_score(lead)
+    create_hot_lead_alert(
+        db,
+        lead,
+        was_hot=was_hot,
+        score=lead.lead_score,
+        reason=f"Lead became HOT with a CRM score of {lead.lead_score}.",
+    )
 
     # Save activity history
     create_activity(
@@ -1229,6 +1273,7 @@ def update_status(
     lead = (
         db.query(models.Lead)
         .filter(models.Lead.id == lead_id)
+        .with_for_update()
         .first()
     )
 
@@ -1241,6 +1286,7 @@ def update_status(
 
     # Save old status for activity history
     old_status = lead.status
+    was_hot = is_hot_lead(lead)
 
     # Update status
     lead.status = status_data.status
@@ -1251,6 +1297,13 @@ def update_status(
 
     # Recalculate score and temperature
     update_lead_score(lead)
+    create_hot_lead_alert(
+        db,
+        lead,
+        was_hot=was_hot,
+        score=lead.lead_score,
+        reason=f"Lead became HOT with a CRM score of {lead.lead_score}.",
+    )
 
     # Save activity
     create_activity(
@@ -1769,106 +1822,3 @@ def db_check(db: Session = Depends(get_db)):
         "models_file": models.__file__,
         "database_file": __import__("database").__file__,
     }
-
-
-@app.get("/alerts")
-def get_alerts(db: Session = Depends(get_db)):
-    alerts = (
-        db.query(models.Alert)
-        .order_by(models.Alert.created_at.desc())
-        .all()
-    )
-
-    return [
-        {
-            "id": alert.id,
-            "lead_id": alert.lead_id,
-            "alert_type": alert.alert_type,
-            "message": alert.message,
-            "status": alert.status,
-            "created_at": alert.created_at,
-            "reason": alert.reason,
-            "score": alert.score,
-            "qualification_summary": alert.qualification_summary,
-        }
-        for alert in alerts
-    ]
-
-
-@app.post("/alerts/test/{lead_id}")
-def create_test_alert(
-    lead_id: int,
-    db: Session = Depends(get_test_db),
-):
-    lead = db.query(models.Lead).filter(
-        models.Lead.id == lead_id
-    ).first()
-
-    if not lead:
-        raise HTTPException(
-            status_code=404,
-            detail="Lead not found in test database",
-        )
-
-    alert = models.Alert(
-        lead_id=lead.id,
-        alert_type="hot_lead",
-        message=f"Hot lead detected: {lead.name}",
-        status="active",
-        reason="Test alert created successfully",
-        score=lead.lead_score,
-        qualification_summary=(
-            f"Lead score: {lead.lead_score}; "
-            f"Temperature: {lead.lead_temperature}"
-        ),
-    )
-
-    db.add(alert)
-    db.commit()
-    db.refresh(alert)
-
-    return {
-        "message": "Test alert created successfully",
-        "alert_id": alert.id,
-        "lead_id": alert.lead_id,
-        "score": alert.score,
-    }
-
-
-
-@app.patch("/alerts/{alert_id}/status")
-def update_alert_status(
-    alert_id: int,
-    status: str,
-    db: Session = Depends(get_db),
-):
-    allowed_statuses = ["active", "acknowledged", "resolved"]
-
-    if status not in allowed_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail="Status must be active, acknowledged, or resolved",
-        )
-
-    alert = db.query(models.Alert).filter(
-        models.Alert.id == alert_id
-    ).first()
-
-    if not alert:
-        raise HTTPException(
-            status_code=404,
-            detail="Alert not found",
-        )
-
-    alert.status = status
-    db.commit()
-    db.refresh(alert)
-
-    return {
-        "message": "Alert status updated successfully",
-        "alert_id": alert.id,
-        "status": alert.status,
-    }
-
-
-
